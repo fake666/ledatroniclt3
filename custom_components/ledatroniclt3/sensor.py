@@ -72,12 +72,12 @@ class LedatronicComm:
 
             data = bytearray()
             while len(data) < STATUS_END:
-                next = s.recv(STATUS_END - len(data))
-                if next == b'':
+                next_pkg = s.recv(STATUS_END - len(data))
+                if next_pkg == b'':
                     raise Exception("Interrupted")
-                data += next
+                data += next_pkg
 
-            self.current_temp = data[1] + (data[55] * 255)
+            self.current_temp = int.from_bytes(data[0:2], byteorder='big')
 
             self.current_valve_pos_target = data[2]
             self.current_valve_pos_actual = data[3]
