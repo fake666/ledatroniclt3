@@ -2,6 +2,7 @@
   "domain": "ledatroniclt3",
   "name": "Ledatronic LT3",
   "version": "0.0.1",
+  "version": "0.0.2",
   "documentation": "https://github.com/ManClone/ledatroniclt3",
   "dependencies": [],
   "codeowners": ["@fake666","@ManClone"],
