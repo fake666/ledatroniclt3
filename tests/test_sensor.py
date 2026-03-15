@@ -1,9 +1,15 @@
 """Tests for the Ledatronic LT3 sensor platform."""
 
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers import entity_registry as er
+from unittest.mock import patch
 
-from custom_components.ledatroniclt3.const import SENSOR_DESCRIPTIONS
+from homeassistant.config_entries import SOURCE_IMPORT
+from homeassistant.core import DOMAIN as HOMEASSISTANT_DOMAIN, HomeAssistant
+from homeassistant.helpers import entity_registry as er, issue_registry as ir
+
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+from custom_components.ledatroniclt3.const import DOMAIN, SENSOR_DESCRIPTIONS
+from tests.conftest import MOCK_CONFIG, MOCK_DATA
 
 
 async def test_all_sensors_created(
@@ -110,3 +116,41 @@ async def test_unload_entry(
 
     result = await hass.config_entries.async_unload(mock_config_entry.entry_id)
     assert result is True
+
+
+async def test_import_creates_repair_issue(
+    hass: HomeAssistant, mock_coordinator_fetch
+) -> None:
+    """Test that a YAML-imported entry creates a repair issue."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data=MOCK_CONFIG,
+        source=SOURCE_IMPORT,
+        entry_id="imported_entry",
+        title="Ledatronic LT3 (192.168.1.100)",
+    )
+    entry.add_to_hass(hass)
+
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    issue_reg = ir.async_get(hass)
+    issue = issue_reg.async_get_issue(
+        HOMEASSISTANT_DOMAIN, f"deprecated_yaml_{DOMAIN}"
+    )
+    assert issue is not None
+    assert issue.severity == ir.IssueSeverity.WARNING
+
+
+async def test_normal_setup_no_repair_issue(
+    hass: HomeAssistant, mock_config_entry, mock_coordinator_fetch
+) -> None:
+    """Test that a UI-configured entry does not create a repair issue."""
+    await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    issue_reg = ir.async_get(hass)
+    issue = issue_reg.async_get_issue(
+        HOMEASSISTANT_DOMAIN, f"deprecated_yaml_{DOMAIN}"
+    )
+    assert issue is None
