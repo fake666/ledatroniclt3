@@ -10,7 +10,15 @@ from typing import Any
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .const import DOMAIN, STATE_MAP, STATUS_LENGTH, STATUS_START1, STATUS_START2
+from .const import (
+    DOMAIN,
+    ERROR_MAP,
+    FRAME_END1,
+    FRAME_END2,
+    FRAME_START1,
+    FRAME_START2,
+    STATE_MAP,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -45,60 +53,71 @@ class LedatronicCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             sock.settimeout(SOCKET_TIMEOUT)
             sock.connect((self.host, self.port))
 
+            # Wait for status frame start marker: 0x0E 0xFF
             while True:
                 byte = sock.recv(1)
                 if byte == b"":
                     raise ConnectionError("Connection closed by device")
-
-                if byte != STATUS_START1:
+                if byte != FRAME_START1:
                     continue
 
                 byte = sock.recv(1)
                 if byte == b"":
                     raise ConnectionError("Connection closed by device")
-
-                if byte != STATUS_START2:
+                if byte != FRAME_START2:
                     continue
 
+                # Read until end marker: 0x0D 0xFF
                 data = bytearray()
-                while len(data) < STATUS_LENGTH:
-                    chunk = sock.recv(STATUS_LENGTH - len(data))
+                prev = -1
+                while True:
+                    chunk = sock.recv(1)
                     if chunk == b"":
                         raise ConnectionError("Connection closed by device")
-                    data += chunk
+                    cur = chunk[0]
+                    if prev == FRAME_END1 and cur == FRAME_END2:
+                        # Remove the 0x0D that was already appended
+                        data = data[:-1]
+                        break
+                    data.append(cur)
+                    prev = cur
 
-                # TODO: change back to debug after protocol analysis
-                _LOGGER.warning("Raw status packet: %s", data.hex(" "))
+                _LOGGER.debug("Status packet (%d bytes): %s", len(data), data.hex(" "))
                 return self._parse_data(data)
 
     @staticmethod
     def _parse_data(data: bytearray) -> dict[str, Any]:
-        """Parse the binary status packet."""
-        state_val = data[4]
-        state = STATE_MAP.get(state_val, "unknown")
+        """Parse the binary status packet (16 bytes).
 
-        fan_val = data[50]
-        if fan_val == 0:
-            ventilator = "off"
-        elif fan_val == 1:
-            ventilator = "on"
-        else:
-            ventilator = "unknown"
+        Byte mapping:
+          0-1:   chamber temperature (short, big-endian)
+          2:     motor/valve actual position (%)
+          3:     motor/valve target position (%, capped at 100)
+          4:     operating state
+          5:     error code
+          6:     output flags
+          7:     controller version
+          8-9:   max chamber temperature (short, big-endian)
+          10-11: firebed temperature (short, big-endian)
+          12:    temperature trend
+          13-14: oven identifier (short, big-endian)
+          15:    firmware revision
+        """
+        if len(data) < 16:
+            raise ValueError(f"Status packet too short: {len(data)} bytes")
+
+        state_val = data[4]
+        error_val = data[5]
 
         return {
-            "current_temp": int.from_bytes(data[0:2], byteorder="big"),
-            "valve_target": data[2],
-            "valve_actual": data[3],
-            "state": state,
+            "chamber_temp": int.from_bytes(data[0:2], byteorder="big"),
+            "motor_actual": data[2],
+            "motor_target": min(data[3], 100),
+            "state": STATE_MAP.get(state_val, "unknown"),
             "state_raw": state_val,
-            "max_temp": int.from_bytes(data[8:10], byteorder="big"),
-            "grundglut": data[11],
+            "error": ERROR_MAP.get(error_val, "unknown"),
+            "error_raw": error_val,
+            "max_chamber_temp": int.from_bytes(data[8:10], byteorder="big"),
+            "firebed_temp": int.from_bytes(data[10:12], byteorder="big"),
             "trend": data[12],
-            "abbrande": int.from_bytes(data[25:27], byteorder="big"),
-            "heizfehler": int.from_bytes(data[27:29], byteorder="big"),
-            "puffer_unten": data[34],
-            "puffer_oben": data[36],
-            "vorlauf_temp": data[37],
-            "schorn_temp": int.from_bytes(data[46:48], byteorder="big"),
-            "ventilator": ventilator,
         }

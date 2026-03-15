@@ -24,12 +24,26 @@
       "stove_state": {
         "name": "State",
         "state": {
-          "bereit": "Ready",
-          "anheizen": "Heating up",
-          "heizbetrieb": "Heating",
-          "grundglut": "Embers",
-          "heizfehler": "Heating error",
-          "tuer_offen": "Door open",
+          "idle": "Idle",
+          "heating_up": "Heating up",
+          "burning": "Burning",
+          "starting": "Starting",
+          "embers": "Embers",
+          "fault": "Fault",
+          "door_open": "Door open",
+          "unknown": "Unknown"
+        }
+      },
+      "error": {
+        "name": "Error",
+        "state": {
+          "none": "None",
+          "overheating": "Overheating",
+          "motor_fault": "Motor fault",
+          "motor_overheating": "Motor overheating",
+          "critical_overheating": "Critical overheating",
+          "critical_motor_overheating": "Critical motor overheating",
+          "power_fault": "Power fault",
           "unknown": "Unknown"
         }
       },
@@ -39,37 +53,11 @@
       "max_temperature": {
         "name": "Max temperature"
       },
-      "grundglut": {
-        "name": "Embers temperature"
+      "firebed_temperature": {
+        "name": "Firebed temperature"
       },
       "trend": {
         "name": "Trend"
-      },
-      "burns": {
-        "name": "Burns"
-      },
-      "heating_errors": {
-        "name": "Heating errors"
-      },
-      "buffer_bottom": {
-        "name": "Buffer bottom"
-      },
-      "buffer_top": {
-        "name": "Buffer top"
-      },
-      "flow_temperature": {
-        "name": "Flow temperature"
-      },
-      "chimney_temperature": {
-        "name": "Chimney temperature"
-      },
-      "fan": {
-        "name": "Fan",
-        "state": {
-          "on": "On",
-          "off": "Off",
-          "unknown": "Unknown"
-        }
       }
     }
   }

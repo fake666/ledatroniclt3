@@ -16,32 +16,54 @@ from homeassistant.const import PERCENTAGE, UnitOfTemperature
 DOMAIN = "ledatroniclt3"
 DEFAULT_PORT = 10001
 
-STATUS_START1 = b"\x0e"
-STATUS_START2 = b"\xff"
-STATUS_LENGTH = 56
+FRAME_START1 = b"\x0e"
+FRAME_START2 = b"\xff"
+FRAME_END1 = 0x0D
+FRAME_END2 = 0xFF
 
 STATE_MAP: dict[int, str] = {
-    0: "bereit",
-    2: "anheizen",
-    3: "heizbetrieb",
-    4: "heizbetrieb",
-    7: "grundglut",
-    8: "grundglut",
-    97: "heizfehler",
-    98: "tuer_offen",
+    0: "idle",
+    2: "heating_up",
+    3: "burning",
+    4: "burning",
+    6: "starting",
+    7: "embers",
+    8: "embers",
+    97: "fault",
+    98: "door_open",
 }
 
 STOVE_STATES = [
-    "bereit",
-    "anheizen",
-    "heizbetrieb",
-    "grundglut",
-    "heizfehler",
-    "tuer_offen",
+    "idle",
+    "heating_up",
+    "burning",
+    "starting",
+    "embers",
+    "fault",
+    "door_open",
     "unknown",
 ]
 
-FAN_STATES = ["on", "off", "unknown"]
+ERROR_MAP: dict[int, str] = {
+    0: "none",
+    1: "overheating",
+    2: "motor_fault",
+    3: "motor_overheating",
+    16: "critical_overheating",
+    18: "critical_motor_overheating",
+    32: "power_fault",
+}
+
+ERROR_STATES = [
+    "none",
+    "overheating",
+    "motor_fault",
+    "motor_overheating",
+    "critical_overheating",
+    "critical_motor_overheating",
+    "power_fault",
+    "unknown",
+]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -59,7 +81,7 @@ SENSOR_DESCRIPTIONS: tuple[LedatronicSensorEntityDescription, ...] = (
         device_class=SensorDeviceClass.TEMPERATURE,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
-        value_fn=lambda data: data["current_temp"],
+        value_fn=lambda data: data["chamber_temp"],
     ),
     LedatronicSensorEntityDescription(
         key="stove_state",
@@ -70,13 +92,21 @@ SENSOR_DESCRIPTIONS: tuple[LedatronicSensorEntityDescription, ...] = (
         value_fn=lambda data: data["state"],
     ),
     LedatronicSensorEntityDescription(
+        key="error",
+        translation_key="error",
+        device_class=SensorDeviceClass.ENUM,
+        options=ERROR_STATES,
+        icon="mdi:alert-circle-outline",
+        value_fn=lambda data: data["error"],
+    ),
+    LedatronicSensorEntityDescription(
         key="valve",
         translation_key="valve",
         native_unit_of_measurement=PERCENTAGE,
         state_class=SensorStateClass.MEASUREMENT,
         icon="mdi:valve",
-        value_fn=lambda data: data["valve_target"],
-        attr_fn=lambda data: {"actual_position": data["valve_actual"]},
+        value_fn=lambda data: data["motor_target"],
+        attr_fn=lambda data: {"actual_position": data["motor_actual"]},
     ),
     LedatronicSensorEntityDescription(
         key="max_temperature",
@@ -84,74 +114,20 @@ SENSOR_DESCRIPTIONS: tuple[LedatronicSensorEntityDescription, ...] = (
         device_class=SensorDeviceClass.TEMPERATURE,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
-        value_fn=lambda data: data["max_temp"],
+        value_fn=lambda data: data["max_chamber_temp"],
     ),
     LedatronicSensorEntityDescription(
-        key="grundglut",
-        translation_key="grundglut",
+        key="firebed_temperature",
+        translation_key="firebed_temperature",
         device_class=SensorDeviceClass.TEMPERATURE,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
-        value_fn=lambda data: data["grundglut"],
+        value_fn=lambda data: data["firebed_temp"],
     ),
     LedatronicSensorEntityDescription(
         key="trend",
         translation_key="trend",
         icon="mdi:trending-up",
         value_fn=lambda data: data["trend"],
-    ),
-    LedatronicSensorEntityDescription(
-        key="burns",
-        translation_key="burns",
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        icon="mdi:fire-circle",
-        value_fn=lambda data: data["abbrande"],
-    ),
-    LedatronicSensorEntityDescription(
-        key="heating_errors",
-        translation_key="heating_errors",
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        icon="mdi:alert-circle-outline",
-        value_fn=lambda data: data["heizfehler"],
-    ),
-    LedatronicSensorEntityDescription(
-        key="buffer_bottom",
-        translation_key="buffer_bottom",
-        device_class=SensorDeviceClass.TEMPERATURE,
-        state_class=SensorStateClass.MEASUREMENT,
-        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
-        value_fn=lambda data: data["puffer_unten"],
-    ),
-    LedatronicSensorEntityDescription(
-        key="buffer_top",
-        translation_key="buffer_top",
-        device_class=SensorDeviceClass.TEMPERATURE,
-        state_class=SensorStateClass.MEASUREMENT,
-        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
-        value_fn=lambda data: data["puffer_oben"],
-    ),
-    LedatronicSensorEntityDescription(
-        key="flow_temperature",
-        translation_key="flow_temperature",
-        device_class=SensorDeviceClass.TEMPERATURE,
-        state_class=SensorStateClass.MEASUREMENT,
-        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
-        value_fn=lambda data: data["vorlauf_temp"],
-    ),
-    LedatronicSensorEntityDescription(
-        key="chimney_temperature",
-        translation_key="chimney_temperature",
-        device_class=SensorDeviceClass.TEMPERATURE,
-        state_class=SensorStateClass.MEASUREMENT,
-        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
-        value_fn=lambda data: data["schorn_temp"],
-    ),
-    LedatronicSensorEntityDescription(
-        key="fan",
-        translation_key="fan",
-        device_class=SensorDeviceClass.ENUM,
-        options=FAN_STATES,
-        icon="mdi:fan",
-        value_fn=lambda data: data["ventilator"],
     ),
 )
