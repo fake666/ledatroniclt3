@@ -36,6 +36,18 @@ class LedatronicLT3ConfigFlow(ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
+    async def async_step_import(
+        self, import_data: dict[str, Any]
+    ) -> ConfigFlowResult:
+        """Handle import from YAML configuration."""
+        self._async_abort_entries_match(
+            {CONF_HOST: import_data[CONF_HOST], CONF_PORT: import_data[CONF_PORT]}
+        )
+        return self.async_create_entry(
+            title=f"Ledatronic LT3 ({import_data[CONF_HOST]})",
+            data=import_data,
+        )
+
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:

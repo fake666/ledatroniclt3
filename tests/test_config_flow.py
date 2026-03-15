@@ -2,7 +2,7 @@
 
 from unittest.mock import patch
 
-from homeassistant.config_entries import SOURCE_USER
+from homeassistant.config_entries import SOURCE_IMPORT, SOURCE_USER
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 
@@ -73,6 +73,37 @@ async def test_duplicate_entry(hass: HomeAssistant) -> None:
             context={"source": SOURCE_USER},
             data={"host": "192.168.1.100", "port": 10001},
         )
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "already_configured"
+
+
+async def test_import_from_yaml(hass: HomeAssistant) -> None:
+    """Test that YAML config is imported as a config entry."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": SOURCE_IMPORT},
+        data={"host": "192.168.1.100", "port": 10001},
+    )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["title"] == "Ledatronic LT3 (192.168.1.100)"
+    assert result["data"] == {"host": "192.168.1.100", "port": 10001}
+
+
+async def test_import_duplicate_aborts(hass: HomeAssistant) -> None:
+    """Test that importing the same device twice aborts."""
+    await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": SOURCE_IMPORT},
+        data={"host": "192.168.1.100", "port": 10001},
+    )
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": SOURCE_IMPORT},
+        data={"host": "192.168.1.100", "port": 10001},
+    )
 
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "already_configured"
