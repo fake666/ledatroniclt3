@@ -67,6 +67,8 @@ class LedatronicCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         raise ConnectionError("Connection closed by device")
                     data += chunk
 
+                # TODO: change back to debug after protocol analysis
+                _LOGGER.warning("Raw status packet: %s", data.hex(" "))
                 return self._parse_data(data)
 
     @staticmethod
