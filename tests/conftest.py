@@ -17,21 +17,16 @@ MOCK_CONFIG = {
 }
 
 MOCK_DATA = {
-    "current_temp": 185,
-    "valve_target": 80,
-    "valve_actual": 78,
-    "state": "heizbetrieb",
-    "state_raw": 3,
-    "max_temp": 250,
-    "grundglut": 60,
-    "trend": 1,
-    "abbrande": 42,
-    "heizfehler": 0,
-    "puffer_unten": 45,
-    "puffer_oben": 65,
-    "vorlauf_temp": 55,
-    "schorn_temp": 130,
-    "ventilator": "on",
+    "chamber_temp": 127,
+    "motor_actual": 2,
+    "motor_target": 2,
+    "state": "idle",
+    "state_raw": 0,
+    "error": "none",
+    "error_raw": 0,
+    "max_chamber_temp": 617,
+    "firebed_temp": 331,
+    "trend": 10,
 }
 
 

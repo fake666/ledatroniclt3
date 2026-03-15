@@ -58,7 +58,7 @@ async def test_temperature_sensor_value(
 
     state = hass.states.get(entry)
     assert state is not None
-    assert state.state == "185"
+    assert state.state == "127"
 
 
 async def test_stove_state_sensor(
@@ -73,7 +73,22 @@ async def test_stove_state_sensor(
         "sensor", "ledatroniclt3", "test_entry_id_stove_state"
     )
     state = hass.states.get(entry)
-    assert state.state == "heizbetrieb"
+    assert state.state == "idle"
+
+
+async def test_error_sensor(
+    hass: HomeAssistant, mock_config_entry, mock_coordinator_fetch
+) -> None:
+    """Test the error sensor."""
+    await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    entity_reg = er.async_get(hass)
+    entry = entity_reg.async_get_entity_id(
+        "sensor", "ledatroniclt3", "test_entry_id_error"
+    )
+    state = hass.states.get(entry)
+    assert state.state == "none"
 
 
 async def test_valve_sensor_attributes(
@@ -88,23 +103,23 @@ async def test_valve_sensor_attributes(
         "sensor", "ledatroniclt3", "test_entry_id_valve"
     )
     state = hass.states.get(entry)
-    assert state.state == "80"
-    assert state.attributes["actual_position"] == 78
+    assert state.state == "2"
+    assert state.attributes["actual_position"] == 2
 
 
-async def test_fan_sensor(
+async def test_firebed_temperature(
     hass: HomeAssistant, mock_config_entry, mock_coordinator_fetch
 ) -> None:
-    """Test the fan sensor."""
+    """Test the firebed temperature sensor."""
     await hass.config_entries.async_setup(mock_config_entry.entry_id)
     await hass.async_block_till_done()
 
     entity_reg = er.async_get(hass)
     entry = entity_reg.async_get_entity_id(
-        "sensor", "ledatroniclt3", "test_entry_id_fan"
+        "sensor", "ledatroniclt3", "test_entry_id_firebed_temperature"
     )
     state = hass.states.get(entry)
-    assert state.state == "on"
+    assert state.state == "331"
 
 
 async def test_unload_entry(
