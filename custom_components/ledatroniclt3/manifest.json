@@ -1,10 +1,11 @@
 {
   "domain": "ledatroniclt3",
   "name": "Ledatronic LT3",
-  "version": "0.0.3",
+  "version": "0.1.0",
+  "config_flow": true,
   "documentation": "https://github.com/fake666/ledatroniclt3",
   "dependencies": [],
-  "codeowners": ["@fake666","@ManClone"],
+  "codeowners": ["@fake666", "@ManClone"],
   "requirements": [],
   "iot_class": "local_polling"
 }
