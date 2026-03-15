@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- Stove body - tall narrow cylinder -->
+  <rect x="88" y="8" width="80" height="240" rx="40" ry="12" fill="#2d2d2d"/>
+
+  <!-- Tile ring bands - evenly spaced throughout -->
+  <line x1="91" y1="28" x2="165" y2="28" stroke="#444" stroke-width="1.2"/>
+  <line x1="89" y1="44" x2="167" y2="44" stroke="#444" stroke-width="1.2"/>
+  <line x1="88" y1="60" x2="168" y2="60" stroke="#444" stroke-width="1.2"/>
+  <line x1="88" y1="76" x2="168" y2="76" stroke="#444" stroke-width="1.2"/>
+  <line x1="88" y1="92" x2="168" y2="92" stroke="#444" stroke-width="1.2"/>
+  <line x1="88" y1="108" x2="168" y2="108" stroke="#444" stroke-width="1.2"/>
+  <line x1="88" y1="124" x2="168" y2="124" stroke="#444" stroke-width="1.2"/>
+  <!-- gap for window: 130 to 198 -->
+  <line x1="88" y1="204" x2="168" y2="204" stroke="#444" stroke-width="1.2"/>
+  <line x1="88" y1="220" x2="168" y2="220" stroke="#444" stroke-width="1.2"/>
+  <line x1="89" y1="236" x2="167" y2="236" stroke="#444" stroke-width="1.2"/>
+
+  <!-- Fire viewing window frame -->
+  <rect x="102" y="132" width="52" height="66" rx="3" fill="#111" stroke="#555" stroke-width="1.2"/>
+
+  <!-- Window glass area -->
+  <rect x="106" y="136" width="44" height="58" rx="2" fill="#1a0a00"/>
+
+  <!-- Flame outer -->
+  <path d="M128 146
+           C124 156, 114 162, 117 172
+           C118 176, 122 178, 124 174
+           C122 180, 124 184, 128 182
+           C132 184, 134 180, 132 174
+           C134 178, 138 176, 139 172
+           C142 162, 132 156, 128 146Z"
+        fill="#E8820C" opacity="0.95"/>
+
+  <!-- Flame middle -->
+  <path d="M128 155
+           C126 161, 120 166, 122 174
+           C123 177, 126 176, 128 172
+           C130 176, 133 177, 134 174
+           C136 166, 130 161, 128 155Z"
+        fill="#F5B731" opacity="0.9"/>
+
+  <!-- Flame core -->
+  <path d="M128 164
+           C127 168, 125 172, 127 174
+           C128 176, 129 176, 130 174
+           C132 172, 130 168, 128 164Z"
+        fill="#FEDD88" opacity="0.85"/>
+</svg>
