@@ -1,0 +1,76 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to Ledatronic LT3",
+        "data": {
+          "host": "Host",
+          "port": "Port"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot connect to device"
+    },
+    "abort": {
+      "already_configured": "Device is already configured"
+    }
+  },
+  "entity": {
+    "sensor": {
+      "temperature": {
+        "name": "Temperature"
+      },
+      "stove_state": {
+        "name": "State",
+        "state": {
+          "bereit": "Ready",
+          "anheizen": "Heating up",
+          "heizbetrieb": "Heating",
+          "grundglut": "Embers",
+          "heizfehler": "Heating error",
+          "tuer_offen": "Door open",
+          "unknown": "Unknown"
+        }
+      },
+      "valve": {
+        "name": "Valve position"
+      },
+      "max_temperature": {
+        "name": "Max temperature"
+      },
+      "grundglut": {
+        "name": "Embers temperature"
+      },
+      "trend": {
+        "name": "Trend"
+      },
+      "burns": {
+        "name": "Burns"
+      },
+      "heating_errors": {
+        "name": "Heating errors"
+      },
+      "buffer_bottom": {
+        "name": "Buffer bottom"
+      },
+      "buffer_top": {
+        "name": "Buffer top"
+      },
+      "flow_temperature": {
+        "name": "Flow temperature"
+      },
+      "chimney_temperature": {
+        "name": "Chimney temperature"
+      },
+      "fan": {
+        "name": "Fan",
+        "state": {
+          "on": "On",
+          "off": "Off",
+          "unknown": "Unknown"
+        }
+      }
+    }
+  }
+}
