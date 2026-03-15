@@ -2,42 +2,17 @@
 
 from __future__ import annotations
 
-import logging
-
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PORT, Platform
 from homeassistant.core import DOMAIN as HOMEASSISTANT_DOMAIN, HomeAssistant
 from homeassistant.helpers import issue_registry as ir
-from homeassistant.helpers.typing import ConfigType
 
-from .const import DEFAULT_PORT, DOMAIN
+from .const import DOMAIN
 from .coordinator import LedatronicCoordinator
-
-_LOGGER = logging.getLogger(__name__)
 
 PLATFORMS = [Platform.SENSOR]
 
 type LedatronicConfigEntry = ConfigEntry[LedatronicCoordinator]
-
-
-async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Set up the Ledatronic LT3 integration from YAML (import only)."""
-    if DOMAIN not in config:
-        return True
-
-    for platform_config in config[DOMAIN]:
-        hass.async_create_task(
-            hass.config_entries.flow.async_init(
-                DOMAIN,
-                context={"source": "import"},
-                data={
-                    CONF_HOST: platform_config[CONF_HOST],
-                    CONF_PORT: platform_config.get(CONF_PORT, DEFAULT_PORT),
-                },
-            )
-        )
-
-    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: LedatronicConfigEntry) -> bool:
