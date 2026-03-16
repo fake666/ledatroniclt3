@@ -69,9 +69,11 @@ class TestParseData:
         assert result["motor_target"] == 2
         assert result["state"] == "idle"
         assert result["error"] == "none"
+        assert result["controller_version"] == 30
         assert result["max_chamber_temp"] == 617
         assert result["firebed_temp"] == 331
         assert result["trend"] == 10
+        assert result["firmware_revision"] == 19
 
     def test_typical_heating_operation(self):
         """Test parsing a packet during active heating."""
@@ -182,6 +184,13 @@ class TestParseData:
         assert result["chamber_temp"] == 65535
         assert result["max_chamber_temp"] == 65535
         assert result["firebed_temp"] == 65535
+
+    def test_version_fields(self):
+        """Test that controller version and firmware revision are extracted."""
+        data = _make_packet(version=30, firmware2=19)
+        result = LedatronicCoordinator._parse_data(data)
+        assert result["controller_version"] == 30
+        assert result["firmware_revision"] == 19
 
     def test_packet_too_short_raises(self):
         """Test that a packet shorter than 16 bytes raises ValueError."""

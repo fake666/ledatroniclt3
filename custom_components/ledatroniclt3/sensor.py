@@ -89,6 +89,8 @@ class LedatronicSensor(CoordinatorEntity[LedatronicCoordinator], SensorEntity):
             name="Ledatronic LT3",
             manufacturer="LEDA Werk",
             model="LT3",
+            hw_version=str(coordinator.data["controller_version"]),
+            sw_version=str(coordinator.data["firmware_revision"]),
         )
 
     @property

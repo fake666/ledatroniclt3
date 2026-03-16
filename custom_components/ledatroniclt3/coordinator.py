@@ -117,7 +117,9 @@ class LedatronicCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "state_raw": state_val,
             "error": ERROR_MAP.get(error_val, "unknown"),
             "error_raw": error_val,
+            "controller_version": data[7],
             "max_chamber_temp": int.from_bytes(data[8:10], byteorder="big"),
             "firebed_temp": int.from_bytes(data[10:12], byteorder="big"),
             "trend": data[12],
+            "firmware_revision": data[15],
         }
