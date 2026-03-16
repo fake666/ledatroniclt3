@@ -24,9 +24,11 @@ MOCK_DATA = {
     "state_raw": 0,
     "error": "none",
     "error_raw": 0,
+    "controller_version": 30,
     "max_chamber_temp": 617,
     "firebed_temp": 331,
     "trend": 10,
+    "firmware_revision": 19,
 }
 
 
