@@ -15,53 +15,55 @@ def _make_coordinator(hass: HomeAssistant) -> LedatronicCoordinator:
     return LedatronicCoordinator(hass, host=MOCK_HOST, port=MOCK_PORT)
 
 
-async def test_persistent_connection_reused(hass: HomeAssistant) -> None:
-    """Test that the socket is created once and reused across polls."""
+def _build_frame() -> bytes:
+    """Build a minimal valid 16-byte status frame with start/end markers."""
+    payload = bytes(16)
+    return bytes([0x0E, 0xFF]) + payload + bytes([0x0D, 0xFF])
+
+
+def _recv_side_effect(frame: bytes):
+    """Create a side_effect list that yields the frame byte by byte."""
+    return [bytes([b]) for b in frame]
+
+
+async def test_fresh_connection_per_poll(hass: HomeAssistant) -> None:
+    """Test that each poll opens and closes its own connection."""
     coordinator = _make_coordinator(hass)
 
-    with patch.object(coordinator, "_connect") as mock_connect:
-        mock_sock = MagicMock()
-        mock_connect.return_value = mock_sock
+    frame = _build_frame()
+    mock_sock = MagicMock()
 
-        with patch.object(coordinator, "_parse_data", return_value=MOCK_DATA):
-            # Simulate a valid frame on each recv call
-            frame = _build_frame()
-            mock_sock.recv.side_effect = _recv_side_effect(frame)
+    with patch("custom_components.ledatroniclt3.coordinator.socket.socket") as mock_cls, \
+         patch.object(coordinator, "_parse_data", return_value=MOCK_DATA):
+        mock_cls.return_value = mock_sock
 
-            await coordinator._async_update_data()
+        # First poll
+        mock_sock.recv.side_effect = _recv_side_effect(frame)
+        await coordinator._async_update_data()
+        assert mock_cls.call_count == 1
+        assert mock_sock.close.call_count == 1
 
-            mock_sock.recv.side_effect = _recv_side_effect(frame)
-            await coordinator._async_update_data()
+        # Second poll – new socket
+        mock_sock.recv.side_effect = _recv_side_effect(frame)
+        await coordinator._async_update_data()
+        assert mock_cls.call_count == 2
+        assert mock_sock.close.call_count == 2
 
-    assert mock_connect.call_count == 1
 
-
-async def test_reconnect_after_error(hass: HomeAssistant) -> None:
-    """Test that a broken connection is closed and rebuilt on next poll."""
+async def test_socket_closed_on_error(hass: HomeAssistant) -> None:
+    """Test that the socket is closed even when recv raises."""
     coordinator = _make_coordinator(hass)
+    mock_sock = MagicMock()
+    mock_sock.recv.side_effect = ConnectionError("gone")
 
-    mock_sock1 = MagicMock()
-    mock_sock2 = MagicMock()
+    with patch("custom_components.ledatroniclt3.coordinator.socket.socket") as mock_cls, \
+         patch("custom_components.ledatroniclt3.coordinator.asyncio.sleep"), \
+         pytest.raises(UpdateFailed):
+        mock_cls.return_value = mock_sock
+        await coordinator._async_update_data()
 
-    with patch.object(
-        coordinator, "_connect", side_effect=[mock_sock1, mock_sock2, mock_sock2]
-    ) as mock_connect, patch.object(
-        coordinator, "_parse_data", return_value=MOCK_DATA
-    ):
-        # First call: socket dies immediately
-        mock_sock1.recv.side_effect = ConnectionError("Connection closed by device")
-
-        # Second call (retry): works
-        frame = _build_frame()
-        mock_sock2.recv.side_effect = _recv_side_effect(frame)
-
-        result = await coordinator._async_update_data()
-
-    assert result == MOCK_DATA
-    # First socket was closed after error
-    mock_sock1.close.assert_called_once()
-    # Needed 2 connects: original + reconnect
-    assert mock_connect.call_count == 2
+    # Socket closed once per attempt (3 retries)
+    assert mock_sock.close.call_count == 3
 
 
 async def test_retry_succeeds_on_second_attempt(hass: HomeAssistant) -> None:
@@ -102,63 +104,14 @@ async def test_all_retries_exhausted_raises_update_failed(
         await coordinator._async_update_data()
 
 
-async def test_disconnect_on_each_retry(hass: HomeAssistant) -> None:
-    """Test that the socket is disconnected between retry attempts."""
+async def test_connection_closed_by_device(hass: HomeAssistant) -> None:
+    """Test that empty recv (device closed connection) raises ConnectionError."""
     coordinator = _make_coordinator(hass)
-    coordinator._sock = MagicMock()
+    mock_sock = MagicMock()
+    mock_sock.recv.return_value = b""
 
-    with patch.object(
-        coordinator, "_fetch_data", side_effect=OSError("fail")
-    ), patch(
-        "custom_components.ledatroniclt3.coordinator.asyncio.sleep"
-    ), patch.object(
-        coordinator, "_disconnect"
-    ) as mock_disconnect, pytest.raises(
-        UpdateFailed
-    ):
+    with patch("custom_components.ledatroniclt3.coordinator.socket.socket") as mock_cls, \
+         patch("custom_components.ledatroniclt3.coordinator.asyncio.sleep"), \
+         pytest.raises(UpdateFailed):
+        mock_cls.return_value = mock_sock
         await coordinator._async_update_data()
-
-    assert mock_disconnect.call_count == 3
-
-
-async def test_shutdown_closes_socket(hass: HomeAssistant) -> None:
-    """Test that async_shutdown closes the socket."""
-    coordinator = _make_coordinator(hass)
-    mock_sock = MagicMock()
-    coordinator._sock = mock_sock
-
-    await coordinator.async_shutdown()
-
-    mock_sock.close.assert_called_once()
-    assert coordinator._sock is None
-
-
-async def test_disconnect_ignores_close_error(hass: HomeAssistant) -> None:
-    """Test that _disconnect swallows OSError from close."""
-    coordinator = _make_coordinator(hass)
-    mock_sock = MagicMock()
-    mock_sock.close.side_effect = OSError("already closed")
-    coordinator._sock = mock_sock
-
-    coordinator._disconnect()
-
-    assert coordinator._sock is None
-
-
-async def test_disconnect_noop_without_socket(hass: HomeAssistant) -> None:
-    """Test that _disconnect is a no-op when no socket exists."""
-    coordinator = _make_coordinator(hass)
-    assert coordinator._sock is None
-    coordinator._disconnect()
-    assert coordinator._sock is None
-
-
-def _build_frame() -> bytes:
-    """Build a minimal valid 16-byte status frame with start/end markers."""
-    payload = bytes(16)
-    return bytes([0x0E, 0xFF]) + payload + bytes([0x0D, 0xFF])
-
-
-def _recv_side_effect(frame: bytes):
-    """Create a side_effect list that yields the frame byte by byte."""
-    return [bytes([b]) for b in frame]
