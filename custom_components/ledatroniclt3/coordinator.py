@@ -42,29 +42,6 @@ class LedatronicCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
         self.host = host
         self.port = port
-        self._sock: socket.socket | None = None
-
-    def _connect(self) -> socket.socket:
-        """Establish a new TCP connection to the device."""
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(SOCKET_TIMEOUT)
-        sock.connect((self.host, self.port))
-        _LOGGER.debug("Connected to %s:%s", self.host, self.port)
-        return sock
-
-    def _disconnect(self) -> None:
-        """Close the current connection if open."""
-        if self._sock is not None:
-            try:
-                self._sock.close()
-            except OSError:
-                pass
-            self._sock = None
-
-    async def async_shutdown(self) -> None:
-        """Close the connection on coordinator shutdown."""
-        await super().async_shutdown()
-        await self.hass.async_add_executor_job(self._disconnect)
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from the device with retries for transient errors."""
@@ -74,7 +51,6 @@ class LedatronicCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 return await self.hass.async_add_executor_job(self._fetch_data)
             except (OSError, TimeoutError) as err:
                 last_err = err
-                self._disconnect()
                 if attempt < MAX_RETRIES - 1:
                     _LOGGER.debug(
                         "Attempt %d/%d failed: %s – retrying in %ds",
@@ -87,43 +63,51 @@ class LedatronicCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         raise UpdateFailed(f"Error communicating with device: {last_err}") from last_err
 
     def _fetch_data(self) -> dict[str, Any]:
-        """Fetch data from the device, reusing an existing connection."""
-        if self._sock is None:
-            self._sock = self._connect()
+        """Connect, read one status frame, and disconnect.
 
-        sock = self._sock
+        A fresh connection per poll avoids stale data building up in the
+        TCP buffer (the LT3 streams packets continuously).
+        """
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(SOCKET_TIMEOUT)
+        try:
+            sock.connect((self.host, self.port))
 
-        # Wait for status frame start marker: 0x0E 0xFF
-        while True:
-            byte = sock.recv(1)
-            if byte == b"":
-                raise ConnectionError("Connection closed by device")
-            if byte != FRAME_START1:
-                continue
-
-            byte = sock.recv(1)
-            if byte == b"":
-                raise ConnectionError("Connection closed by device")
-            if byte != FRAME_START2:
-                continue
-
-            # Read until end marker: 0x0D 0xFF
-            data = bytearray()
-            prev = -1
+            # Wait for status frame start marker: 0x0E 0xFF
             while True:
-                chunk = sock.recv(1)
-                if chunk == b"":
+                byte = sock.recv(1)
+                if byte == b"":
                     raise ConnectionError("Connection closed by device")
-                cur = chunk[0]
-                if prev == FRAME_END1 and cur == FRAME_END2:
-                    # Remove the 0x0D that was already appended
-                    data = data[:-1]
-                    break
-                data.append(cur)
-                prev = cur
+                if byte != FRAME_START1:
+                    continue
 
-            _LOGGER.debug("Status packet (%d bytes): %s", len(data), data.hex(" "))
-            return self._parse_data(data)
+                byte = sock.recv(1)
+                if byte == b"":
+                    raise ConnectionError("Connection closed by device")
+                if byte != FRAME_START2:
+                    continue
+
+                # Read until end marker: 0x0D 0xFF
+                data = bytearray()
+                prev = -1
+                while True:
+                    chunk = sock.recv(1)
+                    if chunk == b"":
+                        raise ConnectionError("Connection closed by device")
+                    cur = chunk[0]
+                    if prev == FRAME_END1 and cur == FRAME_END2:
+                        # Remove the 0x0D that was already appended
+                        data = data[:-1]
+                        break
+                    data.append(cur)
+                    prev = cur
+
+                _LOGGER.debug(
+                    "Status packet (%d bytes): %s", len(data), data.hex(" ")
+                )
+                return self._parse_data(data)
+        finally:
+            sock.close()
 
     @staticmethod
     def _parse_data(data: bytearray) -> dict[str, Any]:
