@@ -31,6 +31,11 @@ def _test_connection(host: str, port: int) -> bool:
         return False
 
 
+def _unique_id(host: str, port: int) -> str:
+    """Build the unique ID for a host/port pair."""
+    return f"{host}:{port}"
+
+
 class LedatronicLT3ConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Ledatronic LT3."""
 
@@ -40,9 +45,10 @@ class LedatronicLT3ConfigFlow(ConfigFlow, domain=DOMAIN):
         self, import_data: dict[str, Any]
     ) -> ConfigFlowResult:
         """Handle import from YAML configuration."""
-        self._async_abort_entries_match(
-            {CONF_HOST: import_data[CONF_HOST], CONF_PORT: import_data[CONF_PORT]}
+        await self.async_set_unique_id(
+            _unique_id(import_data[CONF_HOST], import_data[CONF_PORT])
         )
+        self._abort_if_unique_id_configured()
         return self.async_create_entry(
             title=f"Ledatronic LT3 ({import_data[CONF_HOST]})",
             data=import_data,
@@ -58,7 +64,8 @@ class LedatronicLT3ConfigFlow(ConfigFlow, domain=DOMAIN):
             host = user_input[CONF_HOST]
             port = user_input[CONF_PORT]
 
-            self._async_abort_entries_match({CONF_HOST: host, CONF_PORT: port})
+            await self.async_set_unique_id(_unique_id(host, port))
+            self._abort_if_unique_id_configured()
 
             can_connect = await self.hass.async_add_executor_job(
                 _test_connection, host, port
@@ -74,5 +81,44 @@ class LedatronicLT3ConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="user",
             data_schema=STEP_USER_DATA_SCHEMA,
+            errors=errors,
+        )
+
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle reconfiguration of an existing entry (e.g. IP change)."""
+        entry = self._get_reconfigure_entry()
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            host = user_input[CONF_HOST]
+            port = user_input[CONF_PORT]
+            new_unique_id = _unique_id(host, port)
+
+            for other in self._async_current_entries(include_ignore=False):
+                if (
+                    other.entry_id != entry.entry_id
+                    and other.unique_id == new_unique_id
+                ):
+                    return self.async_abort(reason="wrong_device")
+
+            can_connect = await self.hass.async_add_executor_job(
+                _test_connection, host, port
+            )
+
+            if can_connect:
+                return self.async_update_reload_and_abort(
+                    entry,
+                    data_updates=user_input,
+                    unique_id=new_unique_id,
+                )
+            errors["base"] = "cannot_connect"
+
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=self.add_suggested_values_to_schema(
+                STEP_USER_DATA_SCHEMA, entry.data
+            ),
             errors=errors,
         )

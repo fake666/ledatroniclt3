@@ -31,6 +31,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: LedatronicConfigEntry) -
             },
         )
 
+    if entry.unique_id is None:
+        hass.config_entries.async_update_entry(
+            entry,
+            unique_id=f"{entry.data[CONF_HOST]}:{entry.data[CONF_PORT]}",
+        )
+
     coordinator = LedatronicCoordinator(
         hass,
         host=entry.data[CONF_HOST],

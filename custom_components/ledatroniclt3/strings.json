@@ -7,13 +7,23 @@
           "host": "Host",
           "port": "Port"
         }
+      },
+      "reconfigure": {
+        "title": "Reconfigure Ledatronic LT3",
+        "description": "Update the connection details for this stove.",
+        "data": {
+          "host": "Host",
+          "port": "Port"
+        }
       }
     },
     "error": {
       "cannot_connect": "Cannot connect to device"
     },
     "abort": {
-      "already_configured": "Device is already configured"
+      "already_configured": "Device is already configured",
+      "reconfigure_successful": "Reconfiguration was successful",
+      "wrong_device": "The new host/port belongs to a different stove already configured"
     }
   },
   "entity": {
