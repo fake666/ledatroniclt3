@@ -169,3 +169,22 @@ async def test_normal_setup_no_repair_issue(
         HOMEASSISTANT_DOMAIN, f"deprecated_yaml_{DOMAIN}"
     )
     assert issue is None
+
+
+async def test_unique_id_backfilled_on_setup(
+    hass: HomeAssistant, mock_coordinator_fetch
+) -> None:
+    """Test that legacy entries (no unique_id) get one backfilled on setup."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data=MOCK_CONFIG,
+        entry_id="legacy_entry",
+        unique_id=None,
+        title=f"Ledatronic LT3 ({MOCK_CONFIG['host']})",
+    )
+    entry.add_to_hass(hass)
+
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert entry.unique_id == f"{MOCK_CONFIG['host']}:{MOCK_CONFIG['port']}"
