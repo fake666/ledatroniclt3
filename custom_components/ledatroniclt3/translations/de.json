@@ -1,0 +1,74 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Mit Ledatronic LT3 verbinden",
+        "data": {
+          "host": "Host",
+          "port": "Port"
+        }
+      },
+      "reconfigure": {
+        "title": "Ledatronic LT3 neu konfigurieren",
+        "description": "Verbindungsdaten des Ofens aktualisieren.",
+        "data": {
+          "host": "Host",
+          "port": "Port"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Verbindung zum Gerät nicht möglich"
+    },
+    "abort": {
+      "already_configured": "Gerät ist bereits konfiguriert",
+      "reconfigure_successful": "Neukonfiguration erfolgreich",
+      "wrong_device": "Der neue Host/Port gehört zu einem anderen, bereits konfigurierten Ofen"
+    }
+  },
+  "entity": {
+    "sensor": {
+      "temperature": {
+        "name": "Temperatur"
+      },
+      "stove_state": {
+        "name": "Status",
+        "state": {
+          "idle": "Aus",
+          "heating_up": "Anheizen",
+          "burning": "Brennt",
+          "starting": "Anzünden",
+          "embers": "Glut",
+          "fault": "Heizfehler",
+          "door_open": "Tür offen",
+          "unknown": "Unbekannt"
+        }
+      },
+      "error": {
+        "name": "Fehler",
+        "state": {
+          "none": "Keiner",
+          "overheating": "Überhitzung",
+          "motor_fault": "Motorfehler",
+          "motor_overheating": "Motor überhitzt",
+          "critical_overheating": "Kritische Überhitzung",
+          "critical_motor_overheating": "Kritische Motorüberhitzung",
+          "power_fault": "Stromfehler",
+          "unknown": "Unbekannt"
+        }
+      },
+      "valve": {
+        "name": "Ventilstellung"
+      },
+      "max_temperature": {
+        "name": "Maximaltemperatur"
+      },
+      "firebed_temperature": {
+        "name": "Glutbett-Temperatur"
+      },
+      "trend": {
+        "name": "Trend"
+      }
+    }
+  }
+}
