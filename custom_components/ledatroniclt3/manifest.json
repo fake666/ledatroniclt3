@@ -4,8 +4,12 @@
   "version": "0.1.0",
   "config_flow": true,
   "documentation": "https://github.com/fake666/ledatroniclt3",
+  "issue_tracker": "https://github.com/fake666/ledatroniclt3/issues",
   "dependencies": [],
   "codeowners": ["@fake666", "@ManClone"],
   "requirements": [],
-  "iot_class": "local_polling"
+  "integration_type": "device",
+  "iot_class": "local_polling",
+  "quality_scale": "bronze",
+  "loggers": ["custom_components.ledatroniclt3"]
 }
