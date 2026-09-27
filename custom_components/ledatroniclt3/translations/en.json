@@ -6,6 +6,10 @@
         "data": {
           "host": "Host",
           "port": "Port"
+        },
+        "data_description": {
+          "host": "Hostname or IP address of the LT3 WiFi module.",
+          "port": "TCP port of the LT3 WiFi module (default: 10001)."
         }
       },
       "reconfigure": {
@@ -14,6 +18,10 @@
         "data": {
           "host": "Host",
           "port": "Port"
+        },
+        "data_description": {
+          "host": "Hostname or IP address of the LT3 WiFi module.",
+          "port": "TCP port of the LT3 WiFi module (default: 10001)."
         }
       }
     },

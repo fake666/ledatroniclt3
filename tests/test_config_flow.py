@@ -1,6 +1,9 @@
 """Tests for the Ledatronic LT3 config flow."""
 
-from unittest.mock import patch
+from collections.abc import Generator
+from unittest.mock import AsyncMock, patch
+
+import pytest
 
 from homeassistant.config_entries import SOURCE_IMPORT, SOURCE_USER
 from homeassistant.core import HomeAssistant
@@ -9,6 +12,15 @@ from homeassistant.data_entry_flow import FlowResultType
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ledatroniclt3.const import DOMAIN
+
+
+@pytest.fixture(autouse=True)
+def mock_setup_entry() -> Generator[AsyncMock]:
+    """Prevent the created entries from being set up (and opening sockets)."""
+    with patch(
+        "custom_components.ledatroniclt3.async_setup_entry", return_value=True
+    ) as mock:
+        yield mock
 
 
 async def test_form_is_shown(hass: HomeAssistant) -> None:

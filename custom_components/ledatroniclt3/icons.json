@@ -1,0 +1,26 @@
+{
+  "entity": {
+    "sensor": {
+      "stove_state": {
+        "default": "mdi:fireplace",
+        "state": {
+          "idle": "mdi:fireplace-off",
+          "fault": "mdi:fire-alert",
+          "door_open": "mdi:door-open"
+        }
+      },
+      "error": {
+        "default": "mdi:alert-circle-outline",
+        "state": {
+          "none": "mdi:check-circle-outline"
+        }
+      },
+      "valve": {
+        "default": "mdi:valve"
+      },
+      "trend": {
+        "default": "mdi:trending-up"
+      }
+    }
+  }
+}

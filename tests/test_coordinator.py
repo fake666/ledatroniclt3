@@ -12,7 +12,7 @@ from tests.conftest import MOCK_DATA, MOCK_HOST, MOCK_PORT
 
 
 def _make_coordinator(hass: HomeAssistant) -> LedatronicCoordinator:
-    return LedatronicCoordinator(hass, host=MOCK_HOST, port=MOCK_PORT)
+    return LedatronicCoordinator(hass, None, host=MOCK_HOST, port=MOCK_PORT)
 
 
 def _build_frame() -> bytes:
