@@ -188,3 +188,13 @@ async def test_unique_id_backfilled_on_setup(
     await hass.async_block_till_done()
 
     assert entry.unique_id == f"{MOCK_CONFIG['host']}:{MOCK_CONFIG['port']}"
+
+
+async def test_coordinator_bound_to_entry(
+    hass: HomeAssistant, mock_config_entry, mock_coordinator_fetch
+) -> None:
+    """Test that the coordinator is bound to its config entry."""
+    await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert mock_config_entry.runtime_data.config_entry is mock_config_entry

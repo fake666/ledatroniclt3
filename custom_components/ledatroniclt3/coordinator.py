@@ -8,6 +8,7 @@ import socket
 from datetime import timedelta
 from typing import Any
 
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
@@ -32,11 +33,18 @@ RETRY_DELAY = 2
 class LedatronicCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Coordinator to fetch data from a Ledatronic LT3 device."""
 
-    def __init__(self, hass: HomeAssistant, host: str, port: int) -> None:
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        config_entry: ConfigEntry | None,
+        host: str,
+        port: int,
+    ) -> None:
         """Initialize the coordinator."""
         super().__init__(
             hass,
             _LOGGER,
+            config_entry=config_entry,
             name=DOMAIN,
             update_interval=UPDATE_INTERVAL,
         )

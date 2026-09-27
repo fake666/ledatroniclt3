@@ -88,7 +88,6 @@ SENSOR_DESCRIPTIONS: tuple[LedatronicSensorEntityDescription, ...] = (
         translation_key="stove_state",
         device_class=SensorDeviceClass.ENUM,
         options=STOVE_STATES,
-        icon="mdi:fireplace",
         value_fn=lambda data: data["state"],
     ),
     LedatronicSensorEntityDescription(
@@ -96,7 +95,6 @@ SENSOR_DESCRIPTIONS: tuple[LedatronicSensorEntityDescription, ...] = (
         translation_key="error",
         device_class=SensorDeviceClass.ENUM,
         options=ERROR_STATES,
-        icon="mdi:alert-circle-outline",
         value_fn=lambda data: data["error"],
     ),
     LedatronicSensorEntityDescription(
@@ -104,7 +102,6 @@ SENSOR_DESCRIPTIONS: tuple[LedatronicSensorEntityDescription, ...] = (
         translation_key="valve",
         native_unit_of_measurement=PERCENTAGE,
         state_class=SensorStateClass.MEASUREMENT,
-        icon="mdi:valve",
         value_fn=lambda data: data["motor_target"],
         attr_fn=lambda data: {"actual_position": data["motor_actual"]},
     ),
@@ -127,7 +124,6 @@ SENSOR_DESCRIPTIONS: tuple[LedatronicSensorEntityDescription, ...] = (
     LedatronicSensorEntityDescription(
         key="trend",
         translation_key="trend",
-        icon="mdi:trending-up",
         value_fn=lambda data: data["trend"],
     ),
 )
