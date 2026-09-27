@@ -45,3 +45,14 @@ YAML entries are imported automatically and can be removed from
 
 The integration is available in English and German. Pull requests for further
 languages are welcome.
+
+## License
+
+Copyright (C) 2022-2026 Thomas Högemann and contributors
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU Affero General Public License as published by the Free
+Software Foundation, either version 3 of the License, or (at your option) any
+later version. See [LICENSE](LICENSE) for the full text.
+
+SPDX-License-Identifier: AGPL-3.0-or-later
