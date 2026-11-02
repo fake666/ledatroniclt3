@@ -20,10 +20,18 @@ from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import LedatronicConfigEntry
-from .const import DEFAULT_PORT, DOMAIN, SENSOR_DESCRIPTIONS, LedatronicSensorEntityDescription
+from .const import (
+    DEFAULT_PORT,
+    DOMAIN,
+    SENSOR_DESCRIPTIONS,
+    LedatronicSensorEntityDescription,
+)
 from .coordinator import LedatronicCoordinator
 
 _LOGGER = logging.getLogger(__name__)
+
+# Entities only read coordinator data; no per-entity I/O to serialise.
+PARALLEL_UPDATES = 0
 
 # Legacy YAML platform schema (kept for import migration)
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
@@ -93,7 +101,8 @@ class LedatronicSensor(CoordinatorEntity[LedatronicCoordinator], SensorEntity):
             manufacturer="LEDA Werk",
             model="LT3",
             hw_version=str(coordinator.data["controller_version"]),
-            sw_version=str(coordinator.data["firmware_revision"]),
+            # Only newer modules send the firmware bytes.
+            sw_version=coordinator.data.get("firmware"),
         )
 
     @property

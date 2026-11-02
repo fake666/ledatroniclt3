@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import socket
+import logging
 from typing import Any
 
 import voluptuous as vol
@@ -11,24 +11,27 @@ from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.const import CONF_HOST, CONF_PORT
 
 from .const import DEFAULT_PORT, DOMAIN
+from .protocol import LedatronicProtocolError, read_device
+
+_LOGGER = logging.getLogger(__name__)
 
 STEP_USER_DATA_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_HOST): str,
-        vol.Optional(CONF_PORT, default=DEFAULT_PORT): int,
+        vol.Optional(CONF_PORT, default=DEFAULT_PORT): vol.All(
+            int, vol.Range(min=1, max=65535)
+        ),
     }
 )
 
 
-def _test_connection(host: str, port: int) -> bool:
-    """Test if we can connect to the device."""
+async def _async_try_device(host: str, port: int) -> dict[str, Any] | None:
+    """Read one status frame; None if the device does not answer like an LT3."""
     try:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-            sock.settimeout(5)
-            sock.connect((host, port))
-            return True
-    except (OSError, TimeoutError):
-        return False
+        return await read_device(host, port)
+    except (OSError, TimeoutError, LedatronicProtocolError) as err:
+        _LOGGER.debug("Cannot read %s:%s: %s", host, port, err)
+        return None
 
 
 def _unique_id(host: str, port: int) -> str:
@@ -67,11 +70,7 @@ class LedatronicLT3ConfigFlow(ConfigFlow, domain=DOMAIN):
             await self.async_set_unique_id(_unique_id(host, port))
             self._abort_if_unique_id_configured()
 
-            can_connect = await self.hass.async_add_executor_job(
-                _test_connection, host, port
-            )
-
-            if can_connect:
+            if await _async_try_device(host, port) is not None:
                 return self.async_create_entry(
                     title=f"Ledatronic LT3 ({host})",
                     data=user_input,
@@ -103,11 +102,7 @@ class LedatronicLT3ConfigFlow(ConfigFlow, domain=DOMAIN):
                 ):
                     return self.async_abort(reason="wrong_device")
 
-            can_connect = await self.hass.async_add_executor_job(
-                _test_connection, host, port
-            )
-
-            if can_connect:
+            if await _async_try_device(host, port) is not None:
                 return self.async_update_reload_and_abort(
                     entry,
                     data_updates=user_input,

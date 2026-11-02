@@ -1,6 +1,11 @@
-"""Tests for the Ledatronic LT3 coordinator."""
+"""Tests for the device reader and the coordinator, against a fake LT3 server."""
 
-from unittest.mock import MagicMock, patch
+from __future__ import annotations
+
+import asyncio
+from collections.abc import AsyncIterator, Callable
+from contextlib import asynccontextmanager
+from unittest.mock import patch
 
 import pytest
 
@@ -8,110 +13,203 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
 from custom_components.ledatroniclt3.coordinator import LedatronicCoordinator
-from tests.conftest import MOCK_DATA, MOCK_HOST, MOCK_PORT
+from custom_components.ledatroniclt3.protocol import (
+    LedatronicProtocolError,
+    read_device,
+)
+
+# The fake device listens on loopback; pytest-socket blocks sockets by default.
+pytestmark = [pytest.mark.enable_socket, pytest.mark.allow_hosts(["127.0.0.1"])]
+
+STATUS = bytes.fromhex("007f02020000001e0269014b0a000013")
+OPDATA = bytes.fromhex("f40a0e0b00c1")
 
 
-def _make_coordinator(hass: HomeAssistant) -> LedatronicCoordinator:
-    return LedatronicCoordinator(hass, None, host=MOCK_HOST, port=MOCK_PORT)
+def status_frame(temp: int = 127) -> bytes:
+    """A complete status frame with the given chamber temperature."""
+    payload = bytearray(STATUS)
+    payload[0:2] = temp.to_bytes(2, "big")
+    return b"\x0e\xff" + bytes(payload) + b"\x0d\xff"
 
 
-def _build_frame() -> bytes:
-    """Build a minimal valid 16-byte status frame with start/end markers."""
-    payload = bytes(16)
-    return bytes([0x0E, 0xFF]) + payload + bytes([0x0D, 0xFF])
+def opdata_frame() -> bytes:
+    """A complete operation-data frame."""
+    return b"\x0c\xff\x56" + OPDATA + b"\x0d\xff"
 
 
-def _recv_side_effect(frame: bytes):
-    """Create a side_effect list that yields the frame byte by byte."""
-    return [bytes([b]) for b in frame]
+@asynccontextmanager
+async def fake_lt3(
+    script: Callable[[asyncio.StreamWriter], AsyncIterator[bytes]] | bytes,
+) -> AsyncIterator[tuple[str, int, list[int]]]:
+    """Serve ``script`` (bytes or an async generator of chunks) on localhost.
+
+    Yields (host, port, connections) where connections counts accepted clients.
+    """
+    connections: list[int] = []
+
+    async def handle(
+        reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+    ) -> None:
+        connections.append(1)
+        try:
+            if isinstance(script, bytes):
+                writer.write(script)
+                await writer.drain()
+                # Keep streaming like the real module until the client leaves.
+                while not reader.at_eof():
+                    await asyncio.sleep(0.05)
+                    if writer.is_closing():
+                        break
+                    writer.write(status_frame())
+                    await writer.drain()
+            else:
+                async for chunk in script(writer):
+                    writer.write(chunk)
+                    await writer.drain()
+        except (ConnectionError, asyncio.CancelledError):
+            pass
+        finally:
+            writer.close()
+
+    server = await asyncio.start_server(handle, "127.0.0.1", 0)
+    port = server.sockets[0].getsockname()[1]
+    try:
+        yield "127.0.0.1", port, connections
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+async def test_read_status_and_opdata() -> None:
+    """One status frame plus the operation data that follows it."""
+    async with fake_lt3(status_frame(200) + opdata_frame()) as (host, port, _):
+        data = await read_device(host, port)
+
+    assert data["chamber_temp"] == 200
+    assert data["burnoff_count"] == 3595
+    assert data["fault_count"] == 193
+
+
+async def test_opdata_buffered_before_status() -> None:
+    """The module may replay last cycle's operation data first; it is used."""
+    async with fake_lt3(opdata_frame() + status_frame(200)) as (host, port, _):
+        t0 = asyncio.get_running_loop().time()
+        data = await read_device(host, port, opdata_timeout=2)
+        elapsed = asyncio.get_running_loop().time() - t0
+
+    assert data["chamber_temp"] == 200
+    assert data["burnoff_count"] == 3595
+    assert elapsed < 1  # did not wait for a second operation-data frame
+
+
+async def test_status_without_opdata() -> None:
+    """Older firmware without operation data still yields a status."""
+    async with fake_lt3(status_frame(200) + status_frame(201)) as (host, port, _):
+        data = await read_device(host, port, opdata_timeout=0.2)
+
+    assert data["chamber_temp"] == 200
+    assert "burnoff_count" not in data
+
+
+async def test_leading_junk_and_stray_marker_byte() -> None:
+    """Junk and a stray 0x0e before the start marker must not eat the frame."""
+    stream = b"\x00\x01\x0e" + status_frame(100) + status_frame(200)
+    async with fake_lt3(stream) as (host, port, _):
+        data = await read_device(host, port, opdata_timeout=0.2)
+
+    assert data["chamber_temp"] == 100
+
+
+async def test_terminator_inside_payload() -> None:
+    """A payload containing 0d ff (3583 °C glitch) is read in full."""
+    glitch = bytearray(STATUS)
+    glitch[8:10] = (0x0DFF).to_bytes(2, "big")
+    stream = b"\x0e\xff" + bytes(glitch) + b"\x0d\xff" + opdata_frame()
+    async with fake_lt3(stream) as (host, port, _):
+        data = await read_device(host, port)
+
+    assert data["max_chamber_temp"] == 0x0DFF
+    assert data["chamber_temp"] == 127
+
+
+async def test_stream_without_frames_times_out() -> None:
+    """A device that never sends a start marker ends with TimeoutError."""
+
+    async def noise(_writer: asyncio.StreamWriter) -> AsyncIterator[bytes]:
+        while True:
+            yield b"\x00"
+            await asyncio.sleep(0.01)
+
+    async with fake_lt3(noise) as (host, port, _):
+        with pytest.raises(TimeoutError):
+            await read_device(host, port, timeout=0.3)
+
+
+async def test_connection_closed_before_frame() -> None:
+    """A device closing early is a connection error."""
+    async with fake_lt3(lambda _w: _empty()) as (host, port, _):
+        with pytest.raises(ConnectionError):
+            await read_device(host, port, timeout=1)
+
+
+async def _empty() -> AsyncIterator[bytes]:
+    return
+    yield b""  # pragma: no cover
+
+
+async def test_short_status_frame_is_protocol_error() -> None:
+    """A status frame that stays short is reported as protocol error."""
+    short = b"\x0e\xff" + bytes(10) + b"\x0d\xff"
+
+    async def once(_writer: asyncio.StreamWriter) -> AsyncIterator[bytes]:
+        yield short
+        await asyncio.sleep(0.05)
+
+    async with fake_lt3(once) as (host, port, _):
+        with pytest.raises((LedatronicProtocolError, ConnectionError)):
+            await read_device(host, port, timeout=1)
 
 
 async def test_fresh_connection_per_poll(hass: HomeAssistant) -> None:
-    """Test that each poll opens and closes its own connection."""
-    coordinator = _make_coordinator(hass)
-
-    frame = _build_frame()
-    mock_sock = MagicMock()
-
-    with patch("custom_components.ledatroniclt3.coordinator.socket.socket") as mock_cls, \
-         patch.object(coordinator, "_parse_data", return_value=MOCK_DATA):
-        mock_cls.return_value = mock_sock
-
-        # First poll
-        mock_sock.recv.side_effect = _recv_side_effect(frame)
+    """Each poll opens and closes its own connection."""
+    async with fake_lt3(status_frame() + opdata_frame()) as (host, port, connections):
+        coordinator = LedatronicCoordinator(hass, None, host=host, port=port)
         await coordinator._async_update_data()
-        assert mock_cls.call_count == 1
-        assert mock_sock.close.call_count == 1
-
-        # Second poll – new socket
-        mock_sock.recv.side_effect = _recv_side_effect(frame)
-        await coordinator._async_update_data()
-        assert mock_cls.call_count == 2
-        assert mock_sock.close.call_count == 2
-
-
-async def test_socket_closed_on_error(hass: HomeAssistant) -> None:
-    """Test that the socket is closed even when recv raises."""
-    coordinator = _make_coordinator(hass)
-    mock_sock = MagicMock()
-    mock_sock.recv.side_effect = ConnectionError("gone")
-
-    with patch("custom_components.ledatroniclt3.coordinator.socket.socket") as mock_cls, \
-         patch("custom_components.ledatroniclt3.coordinator.asyncio.sleep"), \
-         pytest.raises(UpdateFailed):
-        mock_cls.return_value = mock_sock
         await coordinator._async_update_data()
 
-    # Socket closed once per attempt (3 retries)
-    assert mock_sock.close.call_count == 3
+    assert len(connections) == 2
 
 
 async def test_retry_succeeds_on_second_attempt(hass: HomeAssistant) -> None:
-    """Test that a transient error on first attempt is retried successfully."""
-    coordinator = _make_coordinator(hass)
+    """A transient error on the first attempt is retried once."""
+    coordinator = LedatronicCoordinator(hass, None, host="127.0.0.1", port=1)
+    calls = 0
 
-    call_count = 0
+    async def flaky(*_args, **_kwargs) -> dict:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise TimeoutError
+        return {"chamber_temp": 1}
 
-    def _fetch_with_transient_error() -> dict:
-        nonlocal call_count
-        call_count += 1
-        if call_count == 1:
-            raise TimeoutError("socket timed out")
-        return MOCK_DATA
-
-    with patch.object(
-        coordinator, "_fetch_data", side_effect=_fetch_with_transient_error
-    ), patch("custom_components.ledatroniclt3.coordinator.asyncio.sleep"):
+    with (
+        patch("custom_components.ledatroniclt3.coordinator.read_device", flaky),
+        patch("custom_components.ledatroniclt3.coordinator.asyncio.sleep"),
+    ):
         result = await coordinator._async_update_data()
 
-    assert result == MOCK_DATA
-    assert call_count == 2
+    assert result == {"chamber_temp": 1}
+    assert calls == 2
 
 
-async def test_all_retries_exhausted_raises_update_failed(
-    hass: HomeAssistant,
-) -> None:
-    """Test that UpdateFailed is raised after all retries fail."""
-    coordinator = _make_coordinator(hass)
+async def test_connection_refused_raises_update_failed(hass: HomeAssistant) -> None:
+    """Connection refused (e.g. the app holds the single slot) -> UpdateFailed."""
+    async with fake_lt3(b"") as (host, port, _):
+        pass  # server is gone now, port is free and refuses
 
-    with patch.object(
-        coordinator, "_fetch_data", side_effect=OSError("connection refused")
-    ), patch(
-        "custom_components.ledatroniclt3.coordinator.asyncio.sleep"
-    ), pytest.raises(
-        UpdateFailed, match="connection refused"
+    coordinator = LedatronicCoordinator(hass, None, host=host, port=port)
+    with (
+        patch("custom_components.ledatroniclt3.coordinator.asyncio.sleep"),
+        pytest.raises(UpdateFailed, match="Error communicating"),
     ):
-        await coordinator._async_update_data()
-
-
-async def test_connection_closed_by_device(hass: HomeAssistant) -> None:
-    """Test that empty recv (device closed connection) raises ConnectionError."""
-    coordinator = _make_coordinator(hass)
-    mock_sock = MagicMock()
-    mock_sock.recv.return_value = b""
-
-    with patch("custom_components.ledatroniclt3.coordinator.socket.socket") as mock_cls, \
-         patch("custom_components.ledatroniclt3.coordinator.asyncio.sleep"), \
-         pytest.raises(UpdateFailed):
-        mock_cls.return_value = mock_sock
         await coordinator._async_update_data()

@@ -1,15 +1,17 @@
 """Tests for the Ledatronic LT3 sensor platform."""
 
-from unittest.mock import patch
-
 from homeassistant.config_entries import SOURCE_IMPORT
 from homeassistant.core import DOMAIN as HOMEASSISTANT_DOMAIN, HomeAssistant
-from homeassistant.helpers import entity_registry as er, issue_registry as ir
+from homeassistant.helpers import (
+    device_registry as dr,
+    entity_registry as er,
+    issue_registry as ir,
+)
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ledatroniclt3.const import DOMAIN, SENSOR_DESCRIPTIONS
-from tests.conftest import MOCK_CONFIG, MOCK_DATA
+from tests.conftest import MOCK_CONFIG
 
 
 async def test_all_sensors_created(
@@ -74,6 +76,9 @@ async def test_stove_state_sensor(
     )
     state = hass.states.get(entry)
     assert state.state == "idle"
+    assert state.attributes["state_code"] == 0
+    assert state.attributes["output"] == "none"
+    assert state.attributes["oven_id"] == 19
 
 
 async def test_error_sensor(
@@ -89,6 +94,7 @@ async def test_error_sensor(
     )
     state = hass.states.get(entry)
     assert state.state == "none"
+    assert state.attributes["error_code"] == 0
 
 
 async def test_valve_sensor_attributes(
@@ -107,10 +113,10 @@ async def test_valve_sensor_attributes(
     assert state.attributes["actual_position"] == 2
 
 
-async def test_firebed_temperature(
+async def test_embers_threshold(
     hass: HomeAssistant, mock_config_entry, mock_coordinator_fetch
 ) -> None:
-    """Test the firebed temperature sensor."""
+    """Test the embers threshold sensor (entity key kept as firebed_temperature)."""
     await hass.config_entries.async_setup(mock_config_entry.entry_id)
     await hass.async_block_till_done()
 
@@ -120,6 +126,40 @@ async def test_firebed_temperature(
     )
     state = hass.states.get(entry)
     assert state.state == "331"
+
+
+async def test_counters_and_minutes(
+    hass: HomeAssistant, mock_config_entry, mock_coordinator_fetch
+) -> None:
+    """Test the operation-data counters and the minutes-without-rise sensor."""
+    await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    entity_reg = er.async_get(hass)
+    for key, expected in (
+        ("burnoff_count", "3595"),
+        ("fault_count", "193"),
+        ("trend", "10"),
+        ("max_temperature", "617"),
+    ):
+        entry = entity_reg.async_get_entity_id(
+            "sensor", "ledatroniclt3", f"test_entry_id_{key}"
+        )
+        assert hass.states.get(entry).state == expected, key
+
+
+async def test_device_info_without_firmware(
+    hass: HomeAssistant, mock_config_entry, mock_coordinator_fetch
+) -> None:
+    """A 16-byte frame has no firmware; the oven id must not be shown as one."""
+    await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    device_reg = dr.async_get(hass)
+    device = device_reg.async_get_device(identifiers={(DOMAIN, "test_entry_id")})
+    assert device is not None
+    assert device.hw_version == "30"
+    assert device.sw_version is None
 
 
 async def test_unload_entry(
