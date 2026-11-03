@@ -156,10 +156,11 @@ async def test_device_info_without_firmware(
     await hass.async_block_till_done()
 
     device_reg = dr.async_get(hass)
-    device = device_reg.async_get_device(identifiers={(DOMAIN, "test_entry_id")})
-    assert device is not None
-    assert device.hw_version == "30"
-    assert device.sw_version is None
+    devices = dr.async_entries_for_config_entry(device_reg, "test_entry_id")
+    assert len(devices) == 1
+    assert devices[0].identifiers == {(DOMAIN, "test_entry_id")}
+    assert devices[0].hw_version == "30"
+    assert devices[0].sw_version is None
 
 
 async def test_unload_entry(

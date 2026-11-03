@@ -18,8 +18,9 @@ from custom_components.ledatroniclt3.protocol import (
     read_device,
 )
 
-# The fake device listens on loopback; pytest-socket blocks sockets by default.
-pytestmark = [pytest.mark.enable_socket, pytest.mark.allow_hosts(["127.0.0.1"])]
+# The fake device listens on loopback; the Home Assistant test plugin blocks
+# sockets in every test unless the socket_enabled fixture is requested.
+pytestmark = pytest.mark.usefixtures("socket_enabled")
 
 STATUS = bytes.fromhex("007f02020000001e0269014b0a000013")
 OPDATA = bytes.fromhex("f40a0e0b00c1")
