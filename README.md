@@ -98,7 +98,10 @@ then disconnects. Reading is fully asynchronous with a 10 s deadline per poll.
 ## Origin
 
 The protocol decoding and the first Home Assistant sensor platform were written
-by Thomas "fake" Högemann in January 2019 (published as a gist). ManClone built
+by Thomas "fake" Högemann on 6 January 2019 and published as
+[a gist](https://gist.github.com/fake666/1915ce1d9839e1c86afe006a3e30c906)
+(`ledatroniclt3.py`, the `sensor: - platform: ledatroniclt3` YAML platform
+this integration still imports). ManClone built
 his repository on that code in October 2022; this repository was created from
 his shortly afterwards, which is why GitHub lists it as a fork. The lineage is
 the other way round: this is the original author's continuation.
