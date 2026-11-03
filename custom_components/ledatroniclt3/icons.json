@@ -6,7 +6,9 @@
         "state": {
           "idle": "mdi:fireplace-off",
           "fault": "mdi:fire-alert",
-          "door_open": "mdi:door-open"
+          "door_open": "mdi:door-open",
+          "sensor_fault": "mdi:thermometer-alert",
+          "embers": "mdi:campfire"
         }
       },
       "error": {
@@ -18,8 +20,20 @@
       "valve": {
         "default": "mdi:valve"
       },
+      "max_temperature": {
+        "default": "mdi:thermometer-high"
+      },
+      "firebed_temperature": {
+        "default": "mdi:thermometer-low"
+      },
       "trend": {
-        "default": "mdi:trending-up"
+        "default": "mdi:timer-sand"
+      },
+      "burnoff_count": {
+        "default": "mdi:counter"
+      },
+      "fault_count": {
+        "default": "mdi:alert-octagon-outline"
       }
     }
   }

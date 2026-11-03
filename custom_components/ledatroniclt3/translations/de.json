@@ -26,7 +26,7 @@
       }
     },
     "error": {
-      "cannot_connect": "Verbindung zum Gerät nicht möglich"
+      "cannot_connect": "Verbindung zum Gerät nicht möglich oder keine LT3-Statusdaten empfangen. LEDATRONIC-App schließen: das Modul erlaubt nur eine Verbindung gleichzeitig."
     },
     "abort": {
       "already_configured": "Gerät ist bereits konfiguriert",
@@ -42,13 +42,14 @@
       "stove_state": {
         "name": "Status",
         "state": {
-          "idle": "Aus",
+          "idle": "Bereit",
           "heating_up": "Anheizen",
-          "burning": "Brennt",
+          "burning": "Heizbetrieb",
           "starting": "Anzünden",
-          "embers": "Glut",
+          "embers": "Grundglut",
           "fault": "Heizfehler",
           "door_open": "Tür offen",
+          "sensor_fault": "Fühlerstörung",
           "unknown": "Unbekannt"
         }
       },
@@ -66,16 +67,22 @@
         }
       },
       "valve": {
-        "name": "Ventilstellung"
+        "name": "Luftklappe"
       },
       "max_temperature": {
-        "name": "Maximaltemperatur"
+        "name": "Spitzentemperatur"
       },
       "firebed_temperature": {
-        "name": "Glutbett-Temperatur"
+        "name": "Grundglut-Schwelle"
       },
       "trend": {
-        "name": "Trend"
+        "name": "Minuten ohne Anstieg"
+      },
+      "burnoff_count": {
+        "name": "Abbrände"
+      },
+      "fault_count": {
+        "name": "Heizfehler"
       }
     }
   }

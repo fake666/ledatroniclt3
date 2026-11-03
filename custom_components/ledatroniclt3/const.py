@@ -11,59 +11,20 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.const import PERCENTAGE, UnitOfTemperature
+from homeassistant.const import (
+    PERCENTAGE,
+    EntityCategory,
+    UnitOfTemperature,
+    UnitOfTime,
+)
+
+from .protocol import ERROR_MAP, STATE_MAP
 
 DOMAIN = "ledatroniclt3"
 DEFAULT_PORT = 10001
 
-FRAME_START1 = b"\x0e"
-FRAME_START2 = b"\xff"
-FRAME_END1 = 0x0D
-FRAME_END2 = 0xFF
-
-STATE_MAP: dict[int, str] = {
-    0: "idle",
-    2: "heating_up",
-    3: "burning",
-    4: "burning",
-    6: "starting",
-    7: "embers",
-    8: "embers",
-    97: "fault",
-    98: "door_open",
-}
-
-STOVE_STATES = [
-    "idle",
-    "heating_up",
-    "burning",
-    "starting",
-    "embers",
-    "fault",
-    "door_open",
-    "unknown",
-]
-
-ERROR_MAP: dict[int, str] = {
-    0: "none",
-    1: "overheating",
-    2: "motor_fault",
-    3: "motor_overheating",
-    16: "critical_overheating",
-    18: "critical_motor_overheating",
-    32: "power_fault",
-}
-
-ERROR_STATES = [
-    "none",
-    "overheating",
-    "motor_fault",
-    "motor_overheating",
-    "critical_overheating",
-    "critical_motor_overheating",
-    "power_fault",
-    "unknown",
-]
+STOVE_STATES = [*dict.fromkeys(STATE_MAP.values()), "unknown"]
+ERROR_STATES = [*ERROR_MAP.values(), "unknown"]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -74,6 +35,12 @@ class LedatronicSensorEntityDescription(SensorEntityDescription):
     attr_fn: Callable[[dict[str, Any]], dict[str, Any]] | None = None
 
 
+def _nonzero(key: str) -> Callable[[dict[str, Any]], Any]:
+    """Return the value, or None while the controller reports 0 (not set)."""
+    return lambda data: data[key] or None
+
+
+# Entity keys are part of the unique_id: never rename, only relabel.
 SENSOR_DESCRIPTIONS: tuple[LedatronicSensorEntityDescription, ...] = (
     LedatronicSensorEntityDescription(
         key="temperature",
@@ -89,6 +56,12 @@ SENSOR_DESCRIPTIONS: tuple[LedatronicSensorEntityDescription, ...] = (
         device_class=SensorDeviceClass.ENUM,
         options=STOVE_STATES,
         value_fn=lambda data: data["state"],
+        attr_fn=lambda data: {
+            "state_code": data["state_raw"],
+            "output": data["output"],
+            "output_on": data["output_on"],
+            "oven_id": data["oven_id"],
+        },
     ),
     LedatronicSensorEntityDescription(
         key="error",
@@ -96,6 +69,7 @@ SENSOR_DESCRIPTIONS: tuple[LedatronicSensorEntityDescription, ...] = (
         device_class=SensorDeviceClass.ENUM,
         options=ERROR_STATES,
         value_fn=lambda data: data["error"],
+        attr_fn=lambda data: {"error_code": data["error_raw"]},
     ),
     LedatronicSensorEntityDescription(
         key="valve",
@@ -119,11 +93,28 @@ SENSOR_DESCRIPTIONS: tuple[LedatronicSensorEntityDescription, ...] = (
         device_class=SensorDeviceClass.TEMPERATURE,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
-        value_fn=lambda data: data["firebed_temp"],
+        value_fn=_nonzero("embers_threshold"),
     ),
     LedatronicSensorEntityDescription(
         key="trend",
         translation_key="trend",
-        value_fn=lambda data: data["trend"],
+        device_class=SensorDeviceClass.DURATION,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfTime.MINUTES,
+        value_fn=lambda data: data["minutes_without_rise"],
+    ),
+    LedatronicSensorEntityDescription(
+        key="burnoff_count",
+        translation_key="burnoff_count",
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda data: data.get("burnoff_count"),
+    ),
+    LedatronicSensorEntityDescription(
+        key="fault_count",
+        translation_key="fault_count",
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda data: data.get("fault_count"),
     ),
 )

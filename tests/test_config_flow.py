@@ -3,11 +3,13 @@
 from collections.abc import Generator
 from unittest.mock import AsyncMock, patch
 
+from tests.conftest import MOCK_DATA
+
 import pytest
 
 from homeassistant.config_entries import SOURCE_IMPORT, SOURCE_USER
 from homeassistant.core import HomeAssistant
-from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.data_entry_flow import FlowResultType, InvalidData
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -36,8 +38,8 @@ async def test_form_is_shown(hass: HomeAssistant) -> None:
 async def test_successful_connection(hass: HomeAssistant) -> None:
     """Test that a successful connection creates a config entry."""
     with patch(
-        "custom_components.ledatroniclt3.config_flow._test_connection",
-        return_value=True,
+        "custom_components.ledatroniclt3.config_flow.read_device",
+        return_value=MOCK_DATA,
     ):
         result = await hass.config_entries.flow.async_init(
             DOMAIN,
@@ -53,8 +55,8 @@ async def test_successful_connection(hass: HomeAssistant) -> None:
 async def test_connection_failure(hass: HomeAssistant) -> None:
     """Test that a failed connection shows an error."""
     with patch(
-        "custom_components.ledatroniclt3.config_flow._test_connection",
-        return_value=False,
+        "custom_components.ledatroniclt3.config_flow.read_device",
+        side_effect=OSError("refused"),
     ):
         result = await hass.config_entries.flow.async_init(
             DOMAIN,
@@ -69,8 +71,8 @@ async def test_connection_failure(hass: HomeAssistant) -> None:
 async def test_duplicate_entry(hass: HomeAssistant) -> None:
     """Test that adding the same device twice aborts."""
     with patch(
-        "custom_components.ledatroniclt3.config_flow._test_connection",
-        return_value=True,
+        "custom_components.ledatroniclt3.config_flow.read_device",
+        return_value=MOCK_DATA,
     ):
         await hass.config_entries.flow.async_init(
             DOMAIN,
@@ -79,8 +81,8 @@ async def test_duplicate_entry(hass: HomeAssistant) -> None:
         )
 
     with patch(
-        "custom_components.ledatroniclt3.config_flow._test_connection",
-        return_value=True,
+        "custom_components.ledatroniclt3.config_flow.read_device",
+        return_value=MOCK_DATA,
     ):
         result = await hass.config_entries.flow.async_init(
             DOMAIN,
@@ -126,8 +128,8 @@ async def test_import_duplicate_aborts(hass: HomeAssistant) -> None:
 async def test_unique_id_is_set_on_create(hass: HomeAssistant) -> None:
     """Test that successful setup stores host:port as unique_id."""
     with patch(
-        "custom_components.ledatroniclt3.config_flow._test_connection",
-        return_value=True,
+        "custom_components.ledatroniclt3.config_flow.read_device",
+        return_value=MOCK_DATA,
     ):
         result = await hass.config_entries.flow.async_init(
             DOMAIN,
@@ -154,8 +156,8 @@ async def test_reconfigure_updates_host(hass: HomeAssistant) -> None:
     assert result["step_id"] == "reconfigure"
 
     with patch(
-        "custom_components.ledatroniclt3.config_flow._test_connection",
-        return_value=True,
+        "custom_components.ledatroniclt3.config_flow.read_device",
+        return_value=MOCK_DATA,
     ):
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"],
@@ -180,8 +182,8 @@ async def test_reconfigure_cannot_connect(hass: HomeAssistant) -> None:
     result = await entry.start_reconfigure_flow(hass)
 
     with patch(
-        "custom_components.ledatroniclt3.config_flow._test_connection",
-        return_value=False,
+        "custom_components.ledatroniclt3.config_flow.read_device",
+        side_effect=OSError("refused"),
     ):
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"],
@@ -212,8 +214,8 @@ async def test_reconfigure_wrong_device_aborts(hass: HomeAssistant) -> None:
     result = await entry.start_reconfigure_flow(hass)
 
     with patch(
-        "custom_components.ledatroniclt3.config_flow._test_connection",
-        return_value=True,
+        "custom_components.ledatroniclt3.config_flow.read_device",
+        return_value=MOCK_DATA,
     ):
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"],
@@ -222,3 +224,21 @@ async def test_reconfigure_wrong_device_aborts(hass: HomeAssistant) -> None:
 
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "wrong_device"
+
+
+async def test_port_out_of_range_rejected(hass: HomeAssistant) -> None:
+    """Ports outside 1-65535 are rejected by the form schema."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_USER}
+    )
+    with (
+        patch(
+            "custom_components.ledatroniclt3.config_flow.read_device",
+            return_value=MOCK_DATA,
+        ) as mock_read,
+        pytest.raises(InvalidData),
+    ):
+        await hass.config_entries.flow.async_configure(
+            result["flow_id"], user_input={"host": "192.168.1.100", "port": 70000}
+        )
+    mock_read.assert_not_called()

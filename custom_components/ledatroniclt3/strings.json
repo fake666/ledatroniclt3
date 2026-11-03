@@ -26,7 +26,7 @@
       }
     },
     "error": {
-      "cannot_connect": "Cannot connect to device"
+      "cannot_connect": "Cannot connect to device, or it did not send an LT3 status frame. Close the LEDATRONIC app: the module accepts only one connection at a time."
     },
     "abort": {
       "already_configured": "Device is already configured",
@@ -49,6 +49,7 @@
           "embers": "Embers",
           "fault": "Fault",
           "door_open": "Door open",
+          "sensor_fault": "Sensor fault",
           "unknown": "Unknown"
         }
       },
@@ -69,13 +70,19 @@
         "name": "Valve position"
       },
       "max_temperature": {
-        "name": "Max temperature"
+        "name": "Peak temperature"
       },
       "firebed_temperature": {
-        "name": "Firebed temperature"
+        "name": "Embers threshold"
       },
       "trend": {
-        "name": "Trend"
+        "name": "Minutes without rise"
+      },
+      "burnoff_count": {
+        "name": "Burn-offs"
+      },
+      "fault_count": {
+        "name": "Heating faults"
       }
     }
   }

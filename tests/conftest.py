@@ -16,6 +16,11 @@ MOCK_CONFIG = {
     "port": MOCK_PORT,
 }
 
+# Status frame captured from a cold stove (state idle, valve parked at 2 %),
+# followed by the operation-data frame.
+MOCK_STATUS_HEX = "00 7f 02 02 00 00 00 1e 02 69 01 4b 0a 00 00 13"
+MOCK_OPDATA_HEX = "f4 0a 0e 0b 00 c1"
+
 MOCK_DATA = {
     "chamber_temp": 127,
     "motor_actual": 2,
@@ -24,11 +29,17 @@ MOCK_DATA = {
     "state_raw": 0,
     "error": "none",
     "error_raw": 0,
+    "output": "none",
+    "output_on": False,
     "controller_version": 30,
     "max_chamber_temp": 617,
-    "firebed_temp": 331,
-    "trend": 10,
-    "firmware_revision": 19,
+    "embers_threshold": 331,
+    "minutes_without_rise": 10,
+    "temperature2": 0,
+    "oven_id": 19,
+    "operating_hours_raw": 62474,
+    "burnoff_count": 3595,
+    "fault_count": 193,
 }
 
 
@@ -53,9 +64,9 @@ def mock_config_entry(hass) -> MockConfigEntry:
 
 @pytest.fixture
 def mock_coordinator_fetch():
-    """Mock the coordinator's _fetch_data to return test data."""
+    """Mock the device read used by the coordinator."""
     with patch(
-        "custom_components.ledatroniclt3.coordinator.LedatronicCoordinator._fetch_data",
+        "custom_components.ledatroniclt3.coordinator.read_device",
         return_value=MOCK_DATA,
     ) as mock_fetch:
         yield mock_fetch
