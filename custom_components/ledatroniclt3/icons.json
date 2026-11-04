@@ -34,6 +34,38 @@
       },
       "fault_count": {
         "default": "mdi:alert-octagon-outline"
+      },
+      "buffer_bottom": {
+        "default": "mdi:storage-tank-outline"
+      },
+      "buffer_middle": {
+        "default": "mdi:storage-tank-outline"
+      },
+      "buffer_top": {
+        "default": "mdi:storage-tank"
+      },
+      "flow_temperature": {
+        "default": "mdi:pipe"
+      },
+      "pump_speed": {
+        "default": "mdi:pump"
+      },
+      "exhaust_temperature": {
+        "default": "mdi:smoke"
+      },
+      "chimney_pressure": {
+        "default": "mdi:gauge"
+      },
+      "alarm_counter": {
+        "default": "mdi:counter"
+      }
+    },
+    "binary_sensor": {
+      "ventilation": {
+        "default": "mdi:fan"
+      },
+      "lock": {
+        "default": "mdi:lock-outline"
       }
     }
   }

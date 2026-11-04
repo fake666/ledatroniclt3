@@ -91,6 +91,42 @@ async def test_read_status_and_opdata() -> None:
     assert data["fault_count"] == 193
 
 
+async def test_full_cycle_with_expansion_modules() -> None:
+    """A captured cycle: all four frames, and no wait for the next status."""
+    cycle = bytes.fromhex(
+        "0eff01ea69640400001e021700000a000008" "0dff"
+        "0cff562a031524014d" "0dff"
+        "0cff203c8d3f4d5f" "0dff"
+        "0cff2180d000c8000001" "0dff"
+    )
+    async with fake_lt3(cycle) as (host, port, _):
+        t0 = asyncio.get_running_loop().time()
+        data = await read_device(host, port, opdata_timeout=2)
+        elapsed = asyncio.get_running_loop().time() - t0
+
+    assert data["chamber_temp"] == 490
+    assert data["max_chamber_temp"] == 535
+    assert data["burnoff_count"] == 5412
+    assert data["fault_count"] == 333
+    assert data["buffer_top"] == 63
+    assert data["flow_temp"] == 77
+    assert data["exhaust_temp"] == 200
+    assert data["chimney_pressure"] == 20.8
+    assert data["ventilation"] is True
+    assert elapsed < 1
+
+
+async def test_bad_reply_does_not_fail_the_poll() -> None:
+    """A truncated optional frame is skipped, the status survives."""
+    bad = b"\x0c\xff\x21\x80\x0d\xff"
+    async with fake_lt3(status_frame(200) + bad + opdata_frame()) as (host, port, _):
+        data = await read_device(host, port, opdata_timeout=0.2)
+
+    assert data["chamber_temp"] == 200
+    assert data["burnoff_count"] == 3595
+    assert "chimney_pressure" not in data
+
+
 async def test_opdata_buffered_before_status() -> None:
     """The module may replay last cycle's operation data first; it is used."""
     async with fake_lt3(opdata_frame() + status_frame(200)) as (host, port, _):

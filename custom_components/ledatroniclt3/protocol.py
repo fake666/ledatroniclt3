@@ -1,10 +1,12 @@
 """Wire protocol of the LEDATRONIC LT3 WiFi module.
 
 The module (a Lantronix xPico serial tunnel on TCP port 10001) accepts a single
-client and streams frames continuously, roughly every 4 s:
+client and streams frames continuously, every 1-4 s depending on the module:
 
     0e ff <status payload, 16 or 18 bytes> 0d ff
     0c ff 56 <operation data, 6 bytes>     0d ff
+    0c ff 20 <KS04 data, 5 bytes>          0d ff  (only with a KS04 station)
+    0c ff 21 <LUC data, 7 bytes>           0d ff  (only with a LUC module)
 
 The byte layout follows the manufacturer's Android app (Status.kt), verified
 against logged burn-offs. Everything in here is plain asyncio so it can be used
@@ -15,12 +17,18 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
+from collections.abc import Callable
 from typing import Any
+
+_LOGGER = logging.getLogger(__name__)
 
 FRAME_END = b"\x0d\xff"
 STATUS_START = b"\x0e\xff"
 COMMAND_START = b"\x0c\xff"
 OPERATION_DATA = 0x56
+KS04 = 0x20
+LUC = 0x21
 
 STATUS_MIN_LENGTH = 16
 
@@ -129,6 +137,61 @@ def parse_operation_data(data: bytes) -> dict[str, Any]:
     }
 
 
+def parse_ks04(data: bytes) -> dict[str, Any]:
+    """Parse the payload of a KS04 frame (after ``0c ff 20``).
+
+    One byte each: buffer bottom, middle and top (°C), flow temperature (°C),
+    pump speed (%). A value is passed on as sent: the manufacturer's app does
+    not filter it either, so a broken probe shows up as a constant reading.
+    """
+    if len(data) < 5:
+        raise LedatronicProtocolError(f"KS04 packet too short: {len(data)} bytes")
+    return {
+        "buffer_bottom": data[0],
+        "buffer_middle": data[1],
+        "buffer_top": data[2],
+        "flow_temp": data[3],
+        "pump_speed": data[4],
+    }
+
+
+def parse_luc(data: bytes) -> dict[str, Any]:
+    """Parse the payload of a LUC frame (after ``0c ff 21``).
+
+    Byte mapping:
+      0-1: chimney pressure: bits 0-10 in 0.1 Pa, bit 15 set = positive
+      2-3: exhaust temperature (°C, signed)
+      4-5: flags: bit 0 offset, bit 1 pressure, bit 2 exhaust and bit 3 relay
+           error, bits 7-14 alarm counter, bit 15 lock
+      6:   ventilation (> 0 = on)
+    """
+    if len(data) < 7:
+        raise LedatronicProtocolError(f"LUC packet too short: {len(data)} bytes")
+    raw_pressure = int.from_bytes(data[0:2], byteorder="big")
+    pressure = (raw_pressure & 0x07FF) / 10
+    if pressure and not raw_pressure & 0x8000:
+        pressure = -pressure
+    flags = int.from_bytes(data[4:6], byteorder="big")
+    return {
+        "chimney_pressure": pressure,
+        "exhaust_temp": int.from_bytes(data[2:4], byteorder="big", signed=True),
+        "ventilation": data[6] > 0,
+        "lock": bool(flags & 0x8000),
+        "alarm_counter": (flags & 0x7F80) >> 7,
+        "error_offset": bool(flags & 0x01),
+        "error_pressure": bool(flags & 0x02),
+        "error_exhaust": bool(flags & 0x04),
+        "error_relay": bool(flags & 0x08),
+    }
+
+
+REPLY_PARSERS: dict[int, Callable[[bytes], dict[str, Any]]] = {
+    OPERATION_DATA: parse_operation_data,
+    KS04: parse_ks04,
+    LUC: parse_luc,
+}
+
+
 async def _read_chunk(reader: asyncio.StreamReader) -> bytes:
     """Read up to and excluding the next ``0d ff``."""
     try:
@@ -180,18 +243,22 @@ async def read_device(
     timeout: float = 10.0,  # noqa: ASYNC109 - the deadline is part of the contract
     opdata_timeout: float = 5.0,
 ) -> dict[str, Any]:
-    """Connect, read one status frame (plus operation data if it follows), disconnect.
+    """Connect, read one status frame plus the rest of its cycle, disconnect.
+
+    The cycle ends when every known reply has been seen or the next status
+    frame arrives, so a stove without expansion modules is not held up.
 
     A fresh connection per poll keeps the single-client module free for the
     manufacturer's app between polls and avoids stale frames in the TCP buffer.
     Raises OSError/TimeoutError on connection problems and
-    LedatronicProtocolError on garbage.
+    LedatronicProtocolError on a bad status frame. Replies are optional: a bad
+    one is skipped.
     """
     async with asyncio.timeout(timeout):
         reader, writer = await asyncio.open_connection(host, port)
         try:
             status: dict[str, Any] | None = None
-            opdata: dict[str, Any] | None = None
+            replies: dict[int, dict[str, Any]] = {}
             while status is None:
                 frame = await _read_frame(reader)
                 if frame is None:
@@ -199,23 +266,24 @@ async def read_device(
                 kind, payload = frame
                 if kind == STATUS_START[0]:
                     status = parse_status(payload)
-                elif _is_opdata(kind, payload):
-                    # The module buffers the last frame sent; that may be the
-                    # operation data of the previous cycle, which is as good.
-                    opdata = parse_operation_data(payload[1:])
+                else:
+                    # The module buffers the last frame sent; that may be a
+                    # reply of the previous cycle, which is as good.
+                    _collect_reply(payload, replies)
 
-            # The OPERATION_DATA frame normally arrives right behind the
-            # status frame. Older firmware may not send it: do not insist.
-            if opdata is None:
-                try:
-                    async with asyncio.timeout(opdata_timeout):
+            # The replies normally arrive right behind the status frame. Older
+            # firmware may not send them: do not insist.
+            with contextlib.suppress(TimeoutError, OSError, LedatronicProtocolError):
+                async with asyncio.timeout(opdata_timeout):
+                    while len(replies) < len(REPLY_PARSERS):
                         frame = await _read_frame(reader)
-                except (TimeoutError, OSError, LedatronicProtocolError):
-                    frame = None
-                if frame is not None and _is_opdata(*frame):
-                    opdata = parse_operation_data(frame[1][1:])
-            if opdata is not None:
-                status.update(opdata)
+                        if frame is None:
+                            continue
+                        if frame[0] == STATUS_START[0]:
+                            break
+                        _collect_reply(frame[1], replies)
+            for reply in replies.values():
+                status.update(reply)
             return status
         finally:
             writer.close()
@@ -223,6 +291,12 @@ async def read_device(
                 await writer.wait_closed()
 
 
-def _is_opdata(kind: int, payload: bytes) -> bool:
-    """True for a command reply carrying OPERATION_DATA."""
-    return kind == COMMAND_START[0] and payload[:1] == bytes([OPERATION_DATA])
+def _collect_reply(payload: bytes, replies: dict[int, dict[str, Any]]) -> None:
+    """Parse a command reply into ``replies``; skip unknown and bad ones."""
+    parser = REPLY_PARSERS.get(payload[0]) if payload else None
+    if parser is None:
+        return
+    try:
+        replies[payload[0]] = parser(payload[1:])
+    except LedatronicProtocolError as err:
+        _LOGGER.debug("Skipping reply 0x%02x: %s", payload[0], err)

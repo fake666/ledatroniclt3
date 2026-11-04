@@ -62,12 +62,18 @@ the connection; closing it frees the module after a few minutes.
 
 ## Protocol
 
-The module streams frames continuously, roughly every 4 seconds:
+The module streams frames continuously, every 1–4 seconds depending on the
+module, without being asked:
 
 ```
 0e ff <status, 16 or 18 bytes> 0d ff
 0c ff 56 <operation data, 6 bytes> 0d ff
+0c ff 20 <KS04 data, 5 bytes> 0d ff
+0c ff 21 <LUC data, 7 bytes> 0d ff
 ```
+
+The last two frames are only sent when the module is installed; their entities
+are created once the first frame has been received.
 
 Status payload (big-endian shorts), as implemented by the manufacturer's app:
 
@@ -88,12 +94,22 @@ Status payload (big-endian shorts), as implemented by the manufacturer's app:
 | 16–17 | firmware revision (newer modules only) |
 
 Operation data: operating hours (unit unverified), number of burn-offs, number
-of heating faults. Buffer, flow and chimney temperatures of the optional
-expansion modules are not streamed; they have to be requested with commands the
-integration does not send.
+of heating faults.
 
-The integration reads one status frame and the operation data that follows it,
-then disconnects. Reading is fully asynchronous with a 10 s deadline per poll.
+KS04 data, one byte each: buffer bottom, middle and top (°C), flow temperature
+(°C), pump speed (%).
+
+LUC data:
+
+| Bytes | Field |
+| --- | --- |
+| 0–1 | chimney pressure: bits 0–10 in 0.1 Pa, bit 15 set = positive |
+| 2–3 | exhaust temperature (°C, signed) |
+| 4–5 | flags: bit 0 offset, bit 1 pressure, bit 2 exhaust and bit 3 relay error, bits 7–14 alarm counter, bit 15 lock |
+| 6 | ventilation (> 0 = on) |
+
+The integration reads one status frame and the rest of its cycle, then
+disconnects. Reading is fully asynchronous with a 10 s deadline per poll.
 
 ## Origin
 

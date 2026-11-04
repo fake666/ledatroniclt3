@@ -4,6 +4,8 @@ import pytest
 
 from custom_components.ledatroniclt3.protocol import (
     LedatronicProtocolError,
+    parse_ks04,
+    parse_luc,
     parse_operation_data,
     parse_status,
 )
@@ -207,3 +209,62 @@ class TestParseOperationData:
         """Fewer than three shorts is garbage."""
         with pytest.raises(LedatronicProtocolError, match="too short"):
             parse_operation_data(bytes(5))
+
+
+class TestParseExpansionModules:
+    """Tests for the KS04 and LUC frames, from a capture of a burning stove."""
+
+    def test_ks04_capture(self):
+        """Frame captured on 2026-11-04, values confirmed in the app."""
+        result = parse_ks04(bytes.fromhex("3c8d3f4d5f"))
+        assert result == {
+            "buffer_bottom": 60,
+            "buffer_middle": 141,
+            "buffer_top": 63,
+            "flow_temp": 77,
+            "pump_speed": 95,
+        }
+
+    def test_luc_capture(self):
+        """Frame captured on 2026-11-04, ventilation on in the app."""
+        result = parse_luc(bytes.fromhex("80d000c8000001"))
+        assert result["chimney_pressure"] == 20.8
+        assert result["exhaust_temp"] == 200
+        assert result["ventilation"] is True
+        assert result["lock"] is False
+        assert result["alarm_counter"] == 0
+        assert result["error_relay"] is False
+
+    @pytest.mark.parametrize(
+        ("raw", "expected"),
+        [
+            ("80d0", 20.8),
+            ("00d0", -20.8),
+            ("8100", 25.6),
+            ("87ff", 204.7),
+            ("8000", 0.0),
+            ("0000", 0.0),
+        ],
+    )
+    def test_luc_pressure(self, raw, expected):
+        """Bit 15 is the sign, bits 0-10 the magnitude in 0.1 Pa."""
+        result = parse_luc(bytes.fromhex(raw + "00c8000000"))
+        assert result["chimney_pressure"] == expected
+        assert str(result["chimney_pressure"]) != "-0.0"
+
+    def test_luc_flags(self):
+        """Lock in bit 15, alarm counter in bits 7-14, errors in bits 0-3."""
+        result = parse_luc(bytes.fromhex("000000008185" + "00"))
+        assert result["lock"] is True
+        assert result["alarm_counter"] == 3
+        assert result["error_offset"] is True
+        assert result["error_pressure"] is False
+        assert result["error_exhaust"] is True
+        assert result["error_relay"] is False
+        assert result["ventilation"] is False
+
+    @pytest.mark.parametrize(("parser", "length"), [(parse_ks04, 4), (parse_luc, 6)])
+    def test_too_short_raises(self, parser, length):
+        """Truncated frames are garbage."""
+        with pytest.raises(LedatronicProtocolError, match="too short"):
+            parser(bytes(length))

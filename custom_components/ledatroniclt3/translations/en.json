@@ -83,6 +83,50 @@
       },
       "fault_count": {
         "name": "Heating faults"
+      },
+      "buffer_bottom": {
+        "name": "Buffer bottom"
+      },
+      "buffer_middle": {
+        "name": "Buffer middle"
+      },
+      "buffer_top": {
+        "name": "Buffer top"
+      },
+      "flow_temperature": {
+        "name": "Flow temperature"
+      },
+      "pump_speed": {
+        "name": "Pump speed"
+      },
+      "exhaust_temperature": {
+        "name": "Exhaust temperature"
+      },
+      "chimney_pressure": {
+        "name": "Chimney pressure"
+      },
+      "alarm_counter": {
+        "name": "Alarm counter"
+      }
+    },
+    "binary_sensor": {
+      "ventilation": {
+        "name": "Ventilation"
+      },
+      "lock": {
+        "name": "Lock"
+      },
+      "error_offset": {
+        "name": "Offset error"
+      },
+      "error_pressure": {
+        "name": "Pressure error"
+      },
+      "error_exhaust": {
+        "name": "Exhaust error"
+      },
+      "error_relay": {
+        "name": "Relay error"
       }
     }
   }
