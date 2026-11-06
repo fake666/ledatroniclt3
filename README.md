@@ -108,8 +108,10 @@ LUC data:
 | 4–5 | flags: bit 0 offset, bit 1 pressure, bit 2 exhaust and bit 3 relay error, bits 7–14 alarm counter, bit 15 lock |
 | 6 | ventilation (> 0 = on) |
 
-The integration reads one status frame and the rest of its cycle, then
-disconnects. Reading is fully asynchronous with a 10 s deadline per poll.
+The integration reads one status frame and the replies the module is known to
+send, then disconnects; the first poll and every tenth read the whole cycle up
+to the next status frame to discover expansion modules. Reading is fully
+asynchronous with a 10 s deadline per poll.
 
 ## Origin
 

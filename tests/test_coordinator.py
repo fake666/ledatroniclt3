@@ -12,7 +12,10 @@ import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
-from custom_components.ledatroniclt3.coordinator import LedatronicCoordinator
+from custom_components.ledatroniclt3.coordinator import (
+    RESCAN_EVERY,
+    LedatronicCoordinator,
+)
 from custom_components.ledatroniclt3.protocol import (
     LedatronicProtocolError,
     read_device,
@@ -120,6 +123,51 @@ async def test_full_cycle_with_expansion_modules() -> None:
     assert data["chimney_pressure"] == 20.8
     assert data["ventilation"] is True
     assert elapsed < 1
+
+
+async def test_known_replies_end_the_read_early() -> None:
+    """Once the device's replies are known, the read ends with the last of them.
+
+    Without that knowledge the read has to run to the next status frame, one
+    whole cycle (3-4 s on a real module) later.
+    """
+
+    async def cycle(_writer: asyncio.StreamWriter) -> AsyncIterator[bytes]:
+        yield status_frame(200) + opdata_frame()
+        await asyncio.sleep(1.0)
+        yield status_frame(201)
+
+    loop = asyncio.get_running_loop()
+    async with fake_lt3(cycle) as (host, port, _):
+        t0 = loop.time()
+        data = await read_device(host, port, expected_replies=frozenset({0x56}))
+        known = loop.time() - t0
+    async with fake_lt3(cycle) as (host, port, _):
+        t0 = loop.time()
+        await read_device(host, port, expected_replies=None)
+        unknown = loop.time() - t0
+
+    assert data["burnoff_count"] == 3595
+    assert known < 0.5
+    assert unknown >= 1.0
+
+
+async def test_coordinator_learns_replies_and_rescans(hass: HomeAssistant) -> None:
+    """The coordinator scans the first poll fully, then asks only for known replies."""
+    coordinator = LedatronicCoordinator(hass, None, host="127.0.0.1", port=1)
+    asked: list[frozenset[int] | None] = []
+
+    async def fake_read(*_args, **kwargs) -> dict:
+        asked.append(kwargs["expected_replies"])
+        return {"chamber_temp": 1, "burnoff_count": 2}
+
+    with patch("custom_components.ledatroniclt3.coordinator.read_device", fake_read):
+        for _ in range(RESCAN_EVERY + 1):
+            await coordinator._async_update_data()
+
+    assert asked[0] is None
+    assert asked[1:RESCAN_EVERY] == [frozenset({0x56})] * (RESCAN_EVERY - 1)
+    assert asked[RESCAN_EVERY] is None
 
 
 async def test_bad_reply_does_not_fail_the_poll() -> None:

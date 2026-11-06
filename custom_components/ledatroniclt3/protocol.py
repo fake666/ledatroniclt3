@@ -191,6 +191,18 @@ REPLY_PARSERS: dict[int, Callable[[bytes], dict[str, Any]]] = {
     LUC: parse_luc,
 }
 
+# One key per reply kind; its presence shows the reply was received.
+REPLY_MARKERS: dict[int, str] = {
+    OPERATION_DATA: "burnoff_count",
+    KS04: "buffer_bottom",
+    LUC: "chimney_pressure",
+}
+
+
+def replies_in(data: dict[str, Any]) -> frozenset[int]:
+    """The reply kinds a ``read_device`` result contains."""
+    return frozenset(kind for kind, key in REPLY_MARKERS.items() if key in data)
+
 
 async def _read_chunk(reader: asyncio.StreamReader) -> bytes:
     """Read up to and excluding the next ``0d ff``."""
@@ -242,11 +254,15 @@ async def read_device(
     port: int,
     timeout: float = 10.0,  # noqa: ASYNC109 - the deadline is part of the contract
     opdata_timeout: float = 5.0,
+    expected_replies: frozenset[int] | None = None,
 ) -> dict[str, Any]:
     """Connect, read one status frame plus the rest of its cycle, disconnect.
 
-    The cycle ends when every known reply has been seen or the next status
-    frame arrives, so a stove without expansion modules is not held up.
+    ``expected_replies`` names the reply kinds this device is known to send;
+    reading stops as soon as they have all been seen. With ``None`` (first
+    poll, or a periodic re-scan) the whole cycle is read, up to the next
+    status frame, which costs one extra cycle (about 3-4 s) but discovers
+    expansion modules.
 
     A fresh connection per poll keeps the single-client module free for the
     manufacturer's app between polls and avoids stale frames in the TCP buffer.
@@ -273,9 +289,12 @@ async def read_device(
 
             # The replies normally arrive right behind the status frame. Older
             # firmware may not send them: do not insist.
+            wanted = (
+                REPLY_PARSERS.keys() if expected_replies is None else expected_replies
+            )
             with contextlib.suppress(TimeoutError, OSError, LedatronicProtocolError):
                 async with asyncio.timeout(opdata_timeout):
-                    while len(replies) < len(REPLY_PARSERS):
+                    while not wanted <= replies.keys():
                         frame = await _read_frame(reader)
                         if frame is None:
                             continue

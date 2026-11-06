@@ -12,7 +12,12 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import DOMAIN
-from .protocol import LedatronicProtocolError, parse_status, read_device
+from .protocol import (
+    LedatronicProtocolError,
+    parse_status,
+    read_device,
+    replies_in,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -21,6 +26,9 @@ SOCKET_TIMEOUT = 10
 # Two attempts fit into one update interval (2 x 10 s + 2 s < 30 s).
 MAX_ATTEMPTS = 2
 RETRY_DELAY = 2
+# Every n-th poll reads a whole cycle again to notice a module that was
+# silent so far (costs one extra cycle, about 3-4 s, once per n polls).
+RESCAN_EVERY = 10
 
 
 class LedatronicCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -46,6 +54,10 @@ class LedatronicCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
         self.host = host
         self.port = port
+        # Reply kinds the device has been seen to send; None until the first
+        # full-cycle read.
+        self._replies: frozenset[int] | None = None
+        self._polls = 0
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch one status frame, retrying once on transient errors.
@@ -57,7 +69,14 @@ class LedatronicCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         last_err: Exception | None = None
         for attempt in range(1, MAX_ATTEMPTS + 1):
             try:
-                data = await read_device(self.host, self.port, timeout=SOCKET_TIMEOUT)
+                data = await read_device(
+                    self.host,
+                    self.port,
+                    timeout=SOCKET_TIMEOUT,
+                    expected_replies=(
+                        None if self._polls % RESCAN_EVERY == 0 else self._replies
+                    ),
+                )
             except (OSError, TimeoutError, LedatronicProtocolError) as err:
                 last_err = err
                 if attempt < MAX_ATTEMPTS:
@@ -70,6 +89,8 @@ class LedatronicCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     )
                     await asyncio.sleep(RETRY_DELAY)
             else:
+                self._polls += 1
+                self._replies = (self._replies or frozenset()) | replies_in(data)
                 _LOGGER.debug("Status: %s", data)
                 return data
         raise UpdateFailed(f"Error communicating with device: {last_err}") from last_err
