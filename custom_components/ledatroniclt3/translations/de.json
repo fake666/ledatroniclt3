@@ -83,6 +83,50 @@
       },
       "fault_count": {
         "name": "Heizfehler"
+      },
+      "buffer_bottom": {
+        "name": "Puffer unten"
+      },
+      "buffer_middle": {
+        "name": "Puffer Mitte"
+      },
+      "buffer_top": {
+        "name": "Puffer oben"
+      },
+      "flow_temperature": {
+        "name": "Vorlauftemperatur"
+      },
+      "pump_speed": {
+        "name": "Pumpe"
+      },
+      "exhaust_temperature": {
+        "name": "Abgastemperatur"
+      },
+      "chimney_pressure": {
+        "name": "Schornsteindruck"
+      },
+      "alarm_counter": {
+        "name": "Alarmzähler"
+      }
+    },
+    "binary_sensor": {
+      "ventilation": {
+        "name": "Lüftung"
+      },
+      "lock": {
+        "name": "Sperre"
+      },
+      "error_offset": {
+        "name": "Offset-Fehler"
+      },
+      "error_pressure": {
+        "name": "Druckfehler"
+      },
+      "error_exhaust": {
+        "name": "Abgasfehler"
+      },
+      "error_relay": {
+        "name": "Relaisfehler"
       }
     }
   }

@@ -10,8 +10,13 @@ from homeassistant.helpers import (
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.ledatroniclt3.const import DOMAIN, SENSOR_DESCRIPTIONS
-from tests.conftest import MOCK_CONFIG
+from custom_components.ledatroniclt3.const import (
+    BINARY_SENSOR_DESCRIPTIONS,
+    DOMAIN,
+    EXPANSION_SENSOR_DESCRIPTIONS,
+    SENSOR_DESCRIPTIONS,
+)
+from tests.conftest import MOCK_CONFIG, MOCK_DATA
 
 
 async def test_all_sensors_created(
@@ -239,3 +244,97 @@ async def test_coordinator_bound_to_entry(
     await hass.async_block_till_done()
 
     assert mock_config_entry.runtime_data.config_entry is mock_config_entry
+
+
+EXPANSION_DATA = {
+    **MOCK_DATA,
+    "buffer_bottom": 60,
+    "buffer_middle": 141,
+    "buffer_top": 63,
+    "flow_temp": 77,
+    "pump_speed": 95,
+    "chimney_pressure": 20.8,
+    "exhaust_temp": 200,
+    "ventilation": True,
+    "lock": False,
+    "alarm_counter": 0,
+    "error_offset": False,
+    "error_pressure": False,
+    "error_exhaust": False,
+    "error_relay": False,
+}
+
+
+def _expansion_entity_id(hass: HomeAssistant, platform: str, entry, key: str) -> str | None:
+    return er.async_get(hass).async_get_entity_id(
+        platform, DOMAIN, f"{entry.entry_id}_{key}"
+    )
+
+
+async def test_no_expansion_entities_without_modules(
+    hass: HomeAssistant, mock_config_entry, mock_coordinator_fetch
+) -> None:
+    """A plain LT3 gets no dead entities."""
+    await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    for desc in EXPANSION_SENSOR_DESCRIPTIONS:
+        assert _expansion_entity_id(hass, "sensor", mock_config_entry, desc.key) is None
+    for desc in BINARY_SENSOR_DESCRIPTIONS:
+        assert (
+            _expansion_entity_id(hass, "binary_sensor", mock_config_entry, desc.key)
+            is None
+        )
+
+
+async def test_expansion_entities_and_values(
+    hass: HomeAssistant, mock_config_entry, mock_coordinator_fetch
+) -> None:
+    """With KS04 and LUC frames all their entities appear with their values."""
+    mock_coordinator_fetch.return_value = EXPANSION_DATA
+    await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    expected = {
+        "buffer_bottom": "60",
+        "buffer_middle": "141",
+        "buffer_top": "63",
+        "flow_temperature": "77",
+        "pump_speed": "95",
+        "exhaust_temperature": "200",
+        "chimney_pressure": "20.8",
+        "alarm_counter": "0",
+    }
+    for key, value in expected.items():
+        entity_id = _expansion_entity_id(hass, "sensor", mock_config_entry, key)
+        assert hass.states.get(entity_id).state == value, key
+
+    entity_id = _expansion_entity_id(
+        hass, "binary_sensor", mock_config_entry, "ventilation"
+    )
+    assert hass.states.get(entity_id).state == "on"
+    entity_id = _expansion_entity_id(
+        hass, "binary_sensor", mock_config_entry, "error_relay"
+    )
+    assert hass.states.get(entity_id).state == "off"
+
+
+async def test_module_heard_late_and_lost(
+    hass: HomeAssistant, mock_config_entry, mock_coordinator_fetch
+) -> None:
+    """Entities follow the frames: added on first sight, unavailable when missing."""
+    await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+    coordinator = mock_config_entry.runtime_data
+    assert _expansion_entity_id(hass, "sensor", mock_config_entry, "buffer_top") is None
+
+    mock_coordinator_fetch.return_value = EXPANSION_DATA
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+    entity_id = _expansion_entity_id(hass, "sensor", mock_config_entry, "buffer_top")
+    assert hass.states.get(entity_id).state == "63"
+
+    mock_coordinator_fetch.return_value = MOCK_DATA
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+    assert hass.states.get(entity_id).state == "unavailable"

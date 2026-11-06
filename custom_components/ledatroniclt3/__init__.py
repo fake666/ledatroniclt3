@@ -10,7 +10,7 @@ from homeassistant.helpers import issue_registry as ir
 from .const import DOMAIN
 from .coordinator import LedatronicCoordinator
 
-PLATFORMS = [Platform.SENSOR]
+PLATFORMS = [Platform.BINARY_SENSOR, Platform.SENSOR]
 
 type LedatronicConfigEntry = ConfigEntry[LedatronicCoordinator]
 

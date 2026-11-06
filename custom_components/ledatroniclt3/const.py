@@ -6,6 +6,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from homeassistant.components.binary_sensor import (
+    BinarySensorDeviceClass,
+    BinarySensorEntityDescription,
+)
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntityDescription,
@@ -14,6 +18,7 @@ from homeassistant.components.sensor import (
 from homeassistant.const import (
     PERCENTAGE,
     EntityCategory,
+    UnitOfPressure,
     UnitOfTemperature,
     UnitOfTime,
 )
@@ -33,11 +38,45 @@ class LedatronicSensorEntityDescription(SensorEntityDescription):
 
     value_fn: Callable[[dict[str, Any]], Any]
     attr_fn: Callable[[dict[str, Any]], dict[str, Any]] | None = None
+    # Set for expansion-module values: the entity is only created once this
+    # key has been received, and is unavailable while it is missing.
+    data_key: str | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class LedatronicBinarySensorEntityDescription(BinarySensorEntityDescription):
+    """Describes a flag reported by an expansion module."""
+
+    data_key: str
 
 
 def _nonzero(key: str) -> Callable[[dict[str, Any]], Any]:
     """Return the value, or None while the controller reports 0 (not set)."""
     return lambda data: data[key] or None
+
+
+def _temperature(key: str, data_key: str) -> LedatronicSensorEntityDescription:
+    """Describe a temperature reported by an expansion module."""
+    return LedatronicSensorEntityDescription(
+        key=key,
+        translation_key=key,
+        device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        data_key=data_key,
+        value_fn=lambda data: data[data_key],
+    )
+
+
+def _luc_error(key: str) -> LedatronicBinarySensorEntityDescription:
+    """Describe an error flag of the LUC module."""
+    return LedatronicBinarySensorEntityDescription(
+        key=key,
+        translation_key=key,
+        device_class=BinarySensorDeviceClass.PROBLEM,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        data_key=key,
+    )
 
 
 # Entity keys are part of the unique_id: never rename, only relabel.
@@ -117,4 +156,57 @@ SENSOR_DESCRIPTIONS: tuple[LedatronicSensorEntityDescription, ...] = (
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda data: data.get("fault_count"),
     ),
+)
+
+# Only created when the module is present (see async_add_expansion_entities).
+EXPANSION_SENSOR_DESCRIPTIONS: tuple[LedatronicSensorEntityDescription, ...] = (
+    _temperature("buffer_bottom", "buffer_bottom"),
+    _temperature("buffer_middle", "buffer_middle"),
+    _temperature("buffer_top", "buffer_top"),
+    _temperature("flow_temperature", "flow_temp"),
+    LedatronicSensorEntityDescription(
+        key="pump_speed",
+        translation_key="pump_speed",
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        data_key="pump_speed",
+        value_fn=lambda data: data["pump_speed"],
+    ),
+    _temperature("exhaust_temperature", "exhaust_temp"),
+    LedatronicSensorEntityDescription(
+        key="chimney_pressure",
+        translation_key="chimney_pressure",
+        device_class=SensorDeviceClass.PRESSURE,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfPressure.PA,
+        suggested_display_precision=1,
+        data_key="chimney_pressure",
+        value_fn=lambda data: data["chimney_pressure"],
+    ),
+    LedatronicSensorEntityDescription(
+        key="alarm_counter",
+        translation_key="alarm_counter",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        data_key="alarm_counter",
+        value_fn=lambda data: data["alarm_counter"],
+    ),
+)
+
+BINARY_SENSOR_DESCRIPTIONS: tuple[LedatronicBinarySensorEntityDescription, ...] = (
+    LedatronicBinarySensorEntityDescription(
+        key="ventilation",
+        translation_key="ventilation",
+        device_class=BinarySensorDeviceClass.RUNNING,
+        data_key="ventilation",
+    ),
+    LedatronicBinarySensorEntityDescription(
+        key="lock",
+        translation_key="lock",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        data_key="lock",
+    ),
+    _luc_error("error_offset"),
+    _luc_error("error_pressure"),
+    _luc_error("error_exhaust"),
+    _luc_error("error_relay"),
 )
