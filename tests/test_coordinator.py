@@ -47,11 +47,13 @@ async def fake_lt3(
     Yields (host, port, connections) where connections counts accepted clients.
     """
     connections: list[int] = []
+    handlers: set[asyncio.Task] = set()
 
     async def handle(
         reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> None:
         connections.append(1)
+        handlers.add(asyncio.current_task())
         try:
             if isinstance(script, bytes):
                 writer.write(script)
@@ -78,6 +80,10 @@ async def fake_lt3(
         yield "127.0.0.1", port, connections
     finally:
         server.close()
+        # A scripted handler may still be streaming into a closed socket.
+        for task in handlers:
+            task.cancel()
+        await asyncio.gather(*handlers, return_exceptions=True)
         await server.wait_closed()
 
 
