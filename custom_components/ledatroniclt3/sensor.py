@@ -10,23 +10,22 @@ import voluptuous as vol
 from homeassistant.components.sensor import PLATFORM_SCHEMA, SensorEntity
 from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import DeviceInfo
 import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.entity_platform import (
     AddConfigEntryEntitiesCallback,
     AddEntitiesCallback,
 )
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import LedatronicConfigEntry
 from .const import (
     DEFAULT_PORT,
     DOMAIN,
+    EXPANSION_SENSOR_DESCRIPTIONS,
     SENSOR_DESCRIPTIONS,
     LedatronicSensorEntityDescription,
 )
-from .coordinator import LedatronicCoordinator
+from .entity import LedatronicEntity, async_add_expansion_entities
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -77,38 +76,20 @@ async def async_setup_entry(
         LedatronicSensor(coordinator, description, entry)
         for description in SENSOR_DESCRIPTIONS
     )
+    async_add_expansion_entities(
+        entry, EXPANSION_SENSOR_DESCRIPTIONS, LedatronicSensor, async_add_entities
+    )
 
 
-class LedatronicSensor(CoordinatorEntity[LedatronicCoordinator], SensorEntity):
+class LedatronicSensor(LedatronicEntity, SensorEntity):
     """Representation of a Ledatronic LT3 sensor."""
 
     entity_description: LedatronicSensorEntityDescription
-    _attr_has_entity_name = True
-
-    def __init__(
-        self,
-        coordinator: LedatronicCoordinator,
-        description: LedatronicSensorEntityDescription,
-        entry: LedatronicConfigEntry,
-    ) -> None:
-        """Initialize the sensor."""
-        super().__init__(coordinator)
-        self.entity_description = description
-        self._attr_unique_id = f"{entry.entry_id}_{description.key}"
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.entry_id)},
-            name="Ledatronic LT3",
-            manufacturer="LEDA Werk",
-            model="LT3",
-            hw_version=str(coordinator.data["controller_version"]),
-            # Only newer modules send the firmware bytes.
-            sw_version=coordinator.data.get("firmware"),
-        )
 
     @property
     def native_value(self) -> Any:
         """Return the sensor value."""
-        if self.coordinator.data is None:
+        if self.coordinator.data is None or not self.available:
             return None
         return self.entity_description.value_fn(self.coordinator.data)
 
